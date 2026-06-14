@@ -7,64 +7,110 @@
     <style>
         body { background: #050505; color: #00ff41; font-family: 'Courier New', Courier, monospace; padding: 10px; }
         .container { max-width: 1000px; margin: auto; }
-        .block { border: 1px solid #00ff41; padding: 10px; margin: 10px 0; background: #0a0a0a; font-size: 0.85em; }
+        input, button { background: #000; color: #00ff41; border: 1px solid #00ff41; padding: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; }
+        
+        .summary-panel, .phase-panel { border: 1px solid #00ff41; padding: 10px; margin: 10px 0; background: #0a0a0a; font-size: 0.85em; }
         .warning { color: #ff3333; font-weight: bold; }
-        .table-container { overflow-x: auto; border: 1px solid #00ff41; margin-top: 15px; }
-        table { width: 100%; border-collapse: collapse; font-size: 0.7em; }
-        th { position: sticky; top: 0; background: #000; padding: 6px; border: 1px solid #00ff41; }
-        td { border: 1px solid #333; padding: 4px; text-align: right; }
+        
+        .table-container { overflow-y: auto; max-height: 40vh; border: 1px solid #00ff41; margin-top: 15px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.70em; }
+        th { position: sticky; top: 0; background: #000; padding: 8px; border: 1px solid #00ff41; z-index: 10; }
+        td { border: 1px solid #333; padding: 5px; text-align: right; }
+        
+        .current-row { background: #00ff4133; color: #fff; font-weight: bold; border-top: 2px solid #00ff41; border-bottom: 2px solid #00ff41; }
+        details { border: 1px solid #333; margin-top: 10px; padding: 10px; font-size: 0.8em; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Weather Engineering Terminal v7.0</h1>
         <input type="text" id="cityInput" placeholder="Stadtname...">
-        <button onclick="searchCity()">Abrufen</button>
+        <input type="date" id="dateInput">
+        <button onclick="searchCity()">Daten abrufen</button>
+        <button id="gpsBtn" onclick="getLocation()">GPS Standort</button>
+
+        <div id="summary-container"></div>
         
-        <div id="analysis-output"></div> <!-- Hier kommen die Berichte hin -->
+        <details>
+            <summary>Legende & Grenzwerte</summary>
+            <ul>
+                <li>Regen: >0.5mm=Schauer, >2mm=Stark.</li>
+                <li>Rad: <100=Trüb, >500=Sonnig.</li>
+                <li>UV: 0-2=Niedrig, 6+=Hoch.</li>
+            </ul>
+        </details>
+        
         <div id="results"></div>
     </div>
 
     <script>
+        document.getElementById('dateInput').valueAsDate = new Date();
+
         async function fetchWeather(lat, lon, name) {
-            const date = new Date().toISOString().split('T')[0];
-            const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&minutely_15=temperature_2m,precipitation,cloud_cover,shortwave_radiation,uv_index&timezone=auto`;
+            const date = document.getElementById('dateInput').value;
+            const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&minutely_15=temperature_2m,relative_humidity_2m,precipitation,precipitation_probability,cloud_cover,wind_speed_10m,wind_gusts_10m,uv_index,shortwave_radiation&timezone=auto`;
+            
             const res = await fetch(url);
             const data = await res.json();
-            generateAnalysis(data);
+            renderAll(data, name);
         }
 
-        function generateAnalysis(data) {
-            const container = document.getElementById('analysis-output');
-            container.innerHTML = "<h2>Analytische Tageszusammenfassung</h2>";
+        function renderAll(data, name) {
+            const container = document.getElementById('summary-container');
+            container.innerHTML = `<h2>Analyse: ${name}</h2>`;
             
-            // Tagesabschnitte definieren (Indices für 15-Min-Daten)
-            const periods = [
-                { name: "Früh (00-06h)", start: 0, end: 24 },
-                { name: "Vormittag (06-12h)", start: 24, end: 48 },
-                { name: "Mittag/Nachmittag (12-18h)", start: 48, end: 72 },
-                { name: "Abend (18-24h)", start: 72, end: 96 }
+            const phases = [
+                {name: "Früher Morgen (00-06)", start: 0, end: 24},
+                {name: "Vormittag (06-12)", start: 24, end: 48},
+                {name: "Nachmittag (12-18)", start: 48, end: 72},
+                {name: "Abend (18-24)", start: 72, end: 96}
             ];
 
-            periods.forEach(p => {
-                let rainDetected = false;
-                let sunHigh = false;
-                let warnings = [];
-
-                for (let i = p.start; i < p.end; i++) {
-                    if (data.minutely_15.precipitation[i] > 0.5) {
-                        rainDetected = true;
-                        warnings.push(`Regen um ${data.minutely_15.time[i].split('T')[1].substring(0,5)}`);
-                    }
-                    if (data.minutely_15.shortwave_radiation[i] > 500) sunHigh = true;
+            phases.forEach(p => {
+                let segment = data.minutely_15.time.slice(p.start, p.end);
+                if(segment.length === 0) return;
+                
+                let rain = data.minutely_15.precipitation.slice(p.start, p.end);
+                let sun = data.minutely_15.shortwave_radiation.slice(p.start, p.end);
+                let avgR = (rain.reduce((a,b)=>a+b, 0) > 0.5) ? "Regen=ja" : "Regen=kaum";
+                let avgS = (Math.max(...sun) > 300) ? "Sonne=viel" : "Sonne=wenig";
+                
+                let alert = "";
+                let maxR = Math.max(...rain);
+                if(maxR > 0.5) {
+                    let idx = rain.indexOf(maxR);
+                    alert = `<div class="warning">Alert: Regen bis ${maxR}mm bei ${data.minutely_15.time[idx].split('T')[1].substring(0,5)} Uhr</div>`;
                 }
 
-                container.innerHTML += `
-                    <div class="block">
-                        <strong>${p.name}:</strong> ${rainDetected ? "Regen möglich" : "Trocken"}, 
-                        Sonne: ${sunHigh ? "Stark" : "Wenig"}.
-                        ${warnings.length > 0 ? `<br><span class="warning">WARNUNG: ${warnings.join(", ")}</span>` : ""}
-                    </div>`;
+                container.innerHTML += `<div class="phase-panel"><strong>${p.name}</strong><br>${avgR}, ${avgS}${alert}</div>`;
+            });
+
+            // Tabelle (Rest behalten)
+            let html = `<div class="table-container"><table><tr><th>Zeit</th><th>°C</th><th>Rad</th><th>UV</th><th>Hum%</th><th>Regen</th><th>P%</th><th>Wind</th></tr>`;
+            for(let i = 0; i < data.minutely_15.time.length; i++) {
+                html += `<tr><td>${data.minutely_15.time[i].split('T')[1].substring(0,5)}</td>
+                    <td>${data.minutely_15.temperature_2m[i]}</td>
+                    <td>${Math.round(data.minutely_15.shortwave_radiation[i])}</td>
+                    <td>${data.minutely_15.uv_index[i]}</td>
+                    <td>${data.minutely_15.relative_humidity_2m[i]}</td>
+                    <td>${data.minutely_15.precipitation[i]}</td>
+                    <td>${data.minutely_15.precipitation_probability[i]}</td>
+                    <td>${data.minutely_15.wind_speed_10m[i]}</td>
+                </tr>`;
+            }
+            container.innerHTML += html + '</table></div>';
+        }
+
+        async function searchCity() {
+            const city = document.getElementById('cityInput').value;
+            const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
+            const data = await res.json();
+            if (data.results) fetchWeather(data.results[0].latitude, data.results[0].longitude, data.results[0].name);
+        }
+        
+        function getLocation() {
+            navigator.geolocation.getCurrentPosition(pos => {
+                fetchWeather(pos.coords.latitude, pos.coords.longitude, "GPS Position");
             });
         }
     </script>
