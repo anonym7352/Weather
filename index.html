@@ -3,45 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weather Engineering Terminal v5.0</title>
+    <title>Weather Engineering Terminal v6.0</title>
     <style>
         body { background: #050505; color: #00ff41; font-family: 'Courier New', Courier, monospace; padding: 10px; }
         .container { max-width: 1000px; margin: auto; }
         input, button { background: #000; color: #00ff41; border: 1px solid #00ff41; padding: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; }
         
-        .table-container { overflow-y: auto; max-height: 60vh; border: 1px solid #00ff41; margin-top: 15px; }
+        .summary-panel { border: 2px solid #00ff41; padding: 10px; margin: 15px 0; background: #0a0a0a; }
+        .warning { color: #ff3333; font-weight: bold; }
+        
+        .table-container { overflow-y: auto; max-height: 50vh; border: 1px solid #00ff41; margin-top: 15px; }
         table { width: 100%; border-collapse: collapse; font-size: 0.70em; }
         th { position: sticky; top: 0; background: #000; padding: 8px; border: 1px solid #00ff41; z-index: 10; }
         td { border: 1px solid #333; padding: 5px; text-align: right; white-space: nowrap; }
         
         .current-row { background: #00ff4133; color: #fff; font-weight: bold; border-top: 2px solid #00ff41; border-bottom: 2px solid #00ff41; }
-        .tz-info { font-size: 0.7em; color: #888; margin-bottom: 10px; }
+        .tz-info { font-size: 0.7em; color: #888; margin-bottom: 5px; }
         
-        .status-box { font-size: 0.8em; color: #aaa; margin: 10px 0; }
-        details { border: 1px solid #333; margin-top: 10px; padding: 5px; font-size: 0.8em; }
-        summary { cursor: pointer; color: #ffaa00; }
+        details { border: 1px solid #333; margin-top: 10px; padding: 10px; font-size: 0.8em; }
+        summary { cursor: pointer; color: #ffaa00; font-weight: bold; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Weather Engineering Console v5.0</h1>
-        <div id="tzInfo" class="tz-info">Zone: Erkenne Zeitzone...</div>
+        <h1>Weather Engineering Console v6.0</h1>
+        <div id="tzInfo" class="tz-info"></div>
         
         <input type="text" id="cityInput" placeholder="Stadtname...">
         <input type="date" id="dateInput">
         <button onclick="searchCity()">Daten abrufen</button>
         <button id="gpsBtn" onclick="getLocation()">GPS Standort</button>
 
-        <div id="status" class="status-box">Status: Standby</div>
+        <div id="summary-panel" class="summary-panel" style="display:none;"></div>
         
         <details>
-            <summary>Parameter Legende</summary>
+            <summary>Parameter Legende & Grenzwerte</summary>
             <ul>
-                <li><strong>°C:</strong> Lufttemp (Schatten).</li>
-                <li><strong>Rad (W/m²):</strong> Kurzwellige Sonneneinstrahlung. >500 = "Knallige Sonne", <100 = Bewölkt/Dämmerung.</li>
-                <li><strong>UV:</strong> UV-Index (Intensität der Sonnenstrahlung).</li>
-                <li><strong>Hum%:</strong> Luftfeuchtigkeit.</li>
-                <li><strong>P%:</strong> Regenwahrscheinlichkeit.</li>
+                <li><strong>°C:</strong> <span style="color:#aaa;">Lufttemp. >25°C = Warm/Heiß.</span></li>
+                <li><strong>Rad (W/m²):</strong> <span style="color:#aaa;">Sonneneinstrahlung. <100 = Bewölkt/Dunkel, >500 = Sehr sonnig/Knallig.</span></li>
+                <li><strong>UV:</strong> <span style="color:#aaa;">UV-Index. 0-2=Niedrig, 6-7=Hoch, >8=Extrem (Schatten suchen).</span></li>
+                <li><strong>Hum%:</strong> <span style="color:#aaa;">Relative Feuchtigkeit. <40%=Trocken, >80%=Schwül/Nebelgefahr.</span></li>
+                <li><strong>Regen (mm):</strong> <span style="color:#aaa;">Niederschlag je 15min. >0.5mm=Regenschauer, >2mm=Starkregen.</span></li>
+                <li><strong>Wind:</strong> <span style="color:#aaa;">Durchschnitt. >30km/h=Frisch, >60km/h=Sturm.</span></li>
             </ul>
         </details>
         
@@ -49,49 +52,53 @@
     </div>
 
     <script>
-        document.getElementById('tzInfo').innerText = "Zone: " + Intl.DateTimeFormat().resolvedOptions().timeZone;
+        document.getElementById('tzInfo').innerText = "Zeitzone: " + Intl.DateTimeFormat().resolvedOptions().timeZone;
         document.getElementById('dateInput').valueAsDate = new Date();
 
         function getNowString() {
             const now = new Date();
-            const year = now.getFullYear();
-            const month = (now.getMonth() + 1).toString().padStart(2, '0');
-            const day = now.getDate().toString().padStart(2, '0');
-            const hours = now.getHours().toString().padStart(2, '0');
-            const mins = (Math.floor(now.getMinutes() / 15) * 15).toString().padStart(2, '0');
-            return `${year}-${month}-${day}T${hours}:${mins}`;
+            return `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')}T${now.getHours().toString().padStart(2,'0')}:${(Math.floor(now.getMinutes()/15)*15).toString().padStart(2,'0')}`;
         }
 
         async function fetchWeather(lat, lon, name) {
-            const status = document.getElementById('status');
             const date = document.getElementById('dateInput').value;
-            status.innerText = `Lade Daten für ${name}...`;
-            
-            // Neu: uv_index und shortwave_radiation hinzugefügt
-            const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&minutely_15=temperature_2m,relative_humidity_2m,precipitation,precipitation_probability,cloud_cover,wind_speed_10m,wind_gusts_10m,uv_index,shortwave_radiation&daily=sunrise,sunset&timezone=auto`;
+            const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&minutely_15=temperature_2m,relative_humidity_2m,precipitation,precipitation_probability,cloud_cover,wind_speed_10m,wind_gusts_10m,uv_index,shortwave_radiation&timezone=auto`;
             
             try {
                 const res = await fetch(url);
                 const data = await res.json();
-                renderData(data, name);
-                status.innerText = "Status: OK.";
-            } catch (e) {
-                status.innerText = "ERROR: " + e;
-            }
+                renderSummary(data);
+                renderData(data);
+            } catch (e) { alert("Datenfehler"); }
         }
 
-        function renderData(data, name) {
+        function renderSummary(data) {
+            const panel = document.getElementById('summary-panel');
+            panel.style.display = 'block';
+            let maxTemp = Math.max(...data.minutely_15.temperature_2m);
+            let maxRain = Math.max(...data.minutely_15.precipitation);
+            let avgTemp = (data.minutely_15.temperature_2m.reduce((a,b)=>a+b, 0) / data.minutely_15.temperature_2m.length).toFixed(1);
+            
+            let warnings = [];
+            if (maxTemp > 25) warnings.push("⚠️ HITZEWARNUNG (>" + maxTemp + "°C)");
+            if (maxRain > 2) warnings.push("⚠️ STARKREGEN (>" + maxRain + "mm/15min)");
+            
+            panel.innerHTML = `
+                <strong>Tages-Durchschnitt: ${avgTemp}°C</strong><br>
+                ${warnings.length > 0 ? '<div class="warning">' + warnings.join('<br>') + '</div>' : 'Status: Keine Wetteranomalien.'}
+            `;
+        }
+
+        function renderData(data) {
             const container = document.getElementById('results');
             const nowStr = getNowString(); 
-            const isToday = (document.getElementById('dateInput').value === new Date().toISOString().split('T')[0]);
-
             let html = `<div class="table-container"><table>
-                        <tr><th>Zeit</th><th>°C</th><th>Rad</th><th>UV</th><th>Hum%</th><th>P%</th><th>Wolken%</th><th>Wind</th></tr>`;
+                        <tr><th>Zeit</th><th>°C</th><th>Rad</th><th>UV</th><th>Hum%</th><th>Regen</th><th>P%</th><th>Wind</th></tr>`;
             
             for(let i = 0; i < data.minutely_15.time.length; i++) {
                 const rowTime = data.minutely_15.time[i];
                 const displayTime = rowTime.split('T')[1].substring(0,5);
-                const isCurrent = (isToday && rowTime === nowStr);
+                const isCurrent = (rowTime === nowStr);
                 
                 html += `<tr class="${isCurrent ? 'current-row' : ''}">
                     <td>${isCurrent ? '▶ ' : ''}${displayTime}</td>
@@ -99,8 +106,8 @@
                     <td>${Math.round(data.minutely_15.shortwave_radiation[i])}</td>
                     <td>${data.minutely_15.uv_index[i]}</td>
                     <td>${data.minutely_15.relative_humidity_2m[i]}</td>
+                    <td>${data.minutely_15.precipitation[i]}</td>
                     <td>${data.minutely_15.precipitation_probability[i]}</td>
-                    <td>${data.minutely_15.cloud_cover[i]}</td>
                     <td>${data.minutely_15.wind_speed_10m[i]}</td>
                 </tr>`;
             }
@@ -112,9 +119,7 @@
             const city = document.getElementById('cityInput').value;
             const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
             const data = await res.json();
-            if (data.results) {
-                fetchWeather(data.results[0].latitude, data.results[0].longitude, data.results[0].name);
-            }
+            if (data.results) fetchWeather(data.results[0].latitude, data.results[0].longitude, data.results[0].name);
         }
 
         function getLocation() {
