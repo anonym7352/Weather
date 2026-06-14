@@ -2,13 +2,15 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>Weather Engineering Terminal v9.5</title>
+    <title>Weather Engineering Terminal v9.6</title>
     <style>
         body { background: #050505; color: #00ff41; font-family: 'Courier New', Courier, monospace; padding: 10px; }
         .container { max-width: 1000px; margin: auto; }
         input, button, select { background: #000; color: #00ff41; border: 1px solid #00ff41; padding: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; }
+        
         .phase-panel { border: 1px solid #00ff41; padding: 10px; margin: 10px 0; background: #0a0a0a; font-size: 0.85em; }
         .warning { color: #ff3333; font-weight: bold; border: 1px solid #ff3333; padding: 4px; margin-top: 5px; }
+        
         .table-container { overflow-y: auto; max-height: 40vh; border: 1px solid #00ff41; margin-top: 15px; }
         table { width: 100%; border-collapse: collapse; font-size: 0.70em; }
         th { position: sticky; top: 0; background: #000; padding: 8px; border: 1px solid #00ff41; z-index: 10; }
@@ -23,7 +25,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>Weather Engineering Console v9.5</h1>
+        <h1>Weather Engineering Console v9.6</h1>
         <div id="status-bar">Status: Bereit</div>
         <div id="locationDisplay" style="font-weight: bold; margin-bottom: 10px; color: #fff;">Kein Standort</div>
         
@@ -40,13 +42,14 @@
         <div id="summary-container"></div>
         
         <details open><summary>Parameter Legende</summary><ul>
-            <li><strong>°C:</strong> Lufttemperatur (Schatten). >25°C = Hitze.</li>
+            <li><strong>°C:</strong> Lufttemp (Schatten). >25°C = Hitze.</li>
             <li><strong>Rad (W/m²):</strong> Einstrahlung. <100=Trüb, >500=Sonnig.</li>
             <li><strong>UV:</strong> 0-2=Niedrig, 6+=Hoch.</li>
             <li><strong>Hum%:</strong> Rel. Feuchtigkeit. >80%=Schwül.</li>
             <li><strong>Regen:</strong> mm je Intervall. >0.5=Schauer.</li>
             <li><strong>Wind/Böe:</strong> km/h. >50=Sturm.</li>
         </ul></details>
+        
         <div id="results"></div>
     </div>
 
@@ -58,8 +61,6 @@
 
         async function fetchData(lat, lon, name, country) {
             setStatus("wird geladen...");
-            
-            // Falls keine Koordinaten, suche nach Input
             if(!lat) {
                 const city = document.getElementById('cityInput').value;
                 if(!city) { setStatus("Fehler: Keine Stadt!"); return; }
@@ -77,14 +78,14 @@
             
             const url = `${baseUrl}?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&${intervalParam}=temperature_2m,relative_humidity_2m,precipitation,precipitation_probability,cloud_cover,wind_speed_10m,wind_gusts_10m,uv_index,shortwave_radiation,weather_code,snowfall&timezone=auto`;
             
-            lastQuery = {lat, lon, name, country}; // Für Auto-Update speichern
+            lastQuery = {lat, lon, name, country};
             const resWeather = await fetch(url);
             const wData = await resWeather.json();
             
             document.getElementById('locationDisplay').innerText = `${name}, ${country}`;
             setStatus("Daten aktuell");
             
-            const normalized = {
+            const d = {
                 time: wData[intervalParam].time,
                 temp: wData[intervalParam].temperature_2m,
                 rad: wData[intervalParam].shortwave_radiation,
@@ -98,7 +99,7 @@
                 snow: wData[intervalParam].snowfall
             };
             
-            renderAll(normalized, name);
+            renderAll(d, name);
             document.getElementById('meta-info').innerText = `Datenstand: ${new Date().toLocaleTimeString()} | Nächstes Update: automatisch in 10 Min.`;
         }
 
@@ -106,15 +107,49 @@
             const container = document.getElementById('summary-container');
             container.innerHTML = `<h2>Analyse: ${name}</h2>`;
             
-            const now = new Date();
-            // Rundung auf 15 Minuten für die Markierung
-            const currentBlock = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')}T${now.getHours().toString().padStart(2,'0')}:${(Math.floor(now.getMinutes()/15)*15).toString().padStart(2,'0')}`;
+            // Text-Zusammenfassungen in 6-Stunden Blöcken
+            const chunks = 4; // 24h / 6h = 4 Blöcke
+            const step = Math.floor(d.time.length / chunks);
 
+            for (let i = 0; i < chunks; i++) {
+                let start = i * step;
+                let end = start + step;
+                if (end > d.time.length) end = d.time.length;
+                let slice = d.time.slice(start, end);
+                if (slice.length === 0) continue;
+
+                let avgT = d.temp.slice(start, end).reduce((a,b)=>a+b, 0) / slice.length;
+                let maxW = Math.max(...d.wind.slice(start, end));
+                let sumR = d.rain.slice(start, end).reduce((a,b)=>a+b, 0);
+                let maxS = Math.max(...d.rad.slice(start, end));
+
+                let desc = `${d.time[start].split('T')[1].substring(0,5)} bis ${d.time[end-1].split('T')[1].substring(0,5)}: `;
+                desc += (maxS > 300 ? "Sonne ist kräftig" : "Sonne ist schwach");
+                desc += (avgT < 10 ? ", es ist frisch" : ", es ist mild");
+                desc += (sumR > 0.5 ? ", Regengefahr" : ", kaum Regen");
+                desc += (maxW > 30 ? ", windig" : ", wenig Wind");
+
+                let alerts = [];
+                for(let j=start; j<end; j++) {
+                    if([95,96,99].includes(d.code[j])) alerts.push(`GEWITTER um ${d.time[j].split('T')[1].substring(0,2)} Uhr`);
+                    if(d.gust[j] > 50) alerts.push(`STARKE BÖE (${d.gust[j]}km/h) um ${d.time[j].split('T')[1].substring(0,2)} Uhr`);
+                    if(d.rain[j] > 2.0) alerts.push(`REGEN (${d.rain[j]}mm) um ${d.time[j].split('T')[1].substring(0,2)} Uhr`);
+                    if(d.snow[j] > 0) alerts.push(`SCHNEE (${d.snow[j]}cm) um ${d.time[j].split('T')[1].substring(0,2)} Uhr`);
+                }
+                
+                let alertHtml = alerts.length > 0 ? `<div class="warning">${alerts.slice(0,2).join('<br>')}</div>` : "";
+                container.innerHTML += `<div class="phase-panel">${desc}${alertHtml}</div>`;
+            }
+
+            // Tabelle
+            const now = new Date();
+            const currentBlock = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')}T${now.getHours().toString().padStart(2,'0')}:${(Math.floor(now.getMinutes()/15)*15).toString().padStart(2,'0')}`;
+            
             let html = `<div class="table-container"><table><tr><th>Zeit</th><th>°C</th><th>Rad</th><th>UV</th><th>Hum%</th><th>Regen</th><th>P%</th><th>Wind</th><th>Böe</th></tr>`;
             for(let i = 0; i < d.time.length; i++) {
                 const isCurrent = d.time[i].startsWith(currentBlock);
                 html += `<tr class="${isCurrent ? 'current-row' : ''}">
-                    <td>${isCurrent ? '<span class="arrow">▶</span>' : ''}${d.time[i].split('T')[1].substring(0,5)}</td>
+                    <td>${isCurrent ? '<span class="arrow">></span>' : ''}${d.time[i].split('T')[1].substring(0,5)}</td>
                     <td>${d.temp[i]}</td><td>${Math.round(d.rad[i]||0)}</td><td>${d.uv[i]||0}</td>
                     <td>${d.hum[i]}</td><td>${d.rain[i]}</td><td>${d.prob[i]||0}</td>
                     <td>${d.wind[i]}</td><td>${d.gust[i]}</td></tr>`;
@@ -130,7 +165,6 @@
             }, () => setStatus("GPS Fehler"));
         }
 
-        // Auto-Refresh alle 10 Minuten
         setInterval(() => { if(lastQuery) fetchData(lastQuery.lat, lastQuery.lon, lastQuery.name, lastQuery.country); }, 600000);
     </script>
 </body>
