@@ -3,76 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wetter Engine</title>
+    <title>Weather Engineering Terminal</title>
     <style>
         body { background: #050505; color: #00ff41; font-family: 'Courier New', Courier, monospace; padding: 10px; }
-        .container { max-width: 600px; margin: auto; }
+        .container { max-width: 1000px; margin: auto; }
         input, button { background: #000; color: #00ff41; border: 1px solid #00ff41; padding: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; }
-        table { width: 100%; border-collapse: collapse; font-size: 0.8em; margin-top: 15px; }
-        th, td { border: 1px solid #333; padding: 4px; text-align: left; }
-        .warning { color: #ffaa00; font-size: 0.7em; margin-bottom: 10px; }
-        h1 { font-size: 1.2em; }
+        
+        /* Tabelle Scrollbar für mobile */
+        .table-container { overflow-x: auto; margin-top: 15px; border: 1px solid #333; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.75em; }
+        th, td { border: 1px solid #333; padding: 6px; text-align: right; white-space: nowrap; }
+        th { background: #111; text-align: center; }
+        
+        .status-box { font-size: 0.8em; color: #aaa; margin: 10px 0; }
+        .info-panel { border: 1px solid #00ff41; padding: 10px; margin-top: 10px; }
+        h2 { font-size: 1em; border-bottom: 1px solid #333; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Wetter Data Terminal v1.0</h1>
-        <input type="text" id="cityInput" placeholder="Stadtname...">
+        <h1>Weather Engineering Console v2.0</h1>
+        <input type="text" id="cityInput" placeholder="Stadtname (z.B. Lübeck)">
         <input type="date" id="dateInput">
         <button onclick="searchCity()">Daten abrufen</button>
-        <button onclick="getLocation()">GPS Standort</button>
+        <button id="gpsBtn" onclick="getLocation()">GPS Standort</button>
 
-        <div id="status" class="warning"></div>
+        <div id="status" class="status-box">Status: Standby</div>
         <div id="results"></div>
     </div>
 
     <script>
-        // Setze Datum auf heute
         document.getElementById('dateInput').valueAsDate = new Date();
 
         async function fetchWeather(lat, lon, name) {
-            const date = document.getElementById('dateInput').value;
             const status = document.getElementById('status');
-            status.innerText = "Query: Requesting ICON-D2 Model data...";
+            const date = document.getElementById('dateInput').value;
+            status.innerText = `Status: Lade Daten für ${name} (Modell: ICON-D2 / ECMWF)...`;
             
-            // minutely_15 für den gesamten Tag
-            const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&minutely_15=temperature_2m,precipitation,cloud_cover,precipitation_probability`;
+            // API call inklusive aller technischen Parameter
+            const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&minutely_15=temperature_2m,relative_humidity_2m,precipitation,precipitation_probability,cloud_cover,wind_speed_10m,wind_gusts_10m&daily=sunrise,sunset&timezone=auto`;
             
             try {
-                const response = await fetch(url);
-                const data = await response.json();
+                const res = await fetch(url);
+                const data = await res.json();
                 renderData(data, name);
+                status.innerText = "Status: Datenübertragung abgeschlossen.";
             } catch (e) {
-                status.innerText = "ERROR: Fetch failed.";
+                status.innerText = "Status: ERROR " + e;
             }
         }
 
         function renderData(data, name) {
             const container = document.getElementById('results');
-            container.innerHTML = `<h2>Ort: ${name}</h2>`;
+            const sunrise = data.daily.sunrise[0].split('T')[1];
+            const sunset = data.daily.sunset[0].split('T')[1];
             
-            let html = '<table><tr><th>Uhr</th><th>°C</th><th>Regen mm</th><th>Wolken %</th></tr>';
+            let html = `
+                <div class="info-panel">
+                    <h2>Terminal: ${name}</h2>
+                    <p>Sonnenaufgang: ${sunrise} | Sonnenuntergang: ${sunset}</p>
+                    <p style="font-size: 0.7em;">Quelle: Offene Wettermodelle (DWD/ECMWF)</p>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <tr>
+                            <th>Zeit</th><th>°C</th><th>Hum%</th><th>Regen mm</th><th>P(%)</th><th>Wolken%</th><th>Wind km/h</th><th>Böe km/h</th>
+                        </tr>`;
             
-            // Alle Datenpunkte durchgehen (96 Stk für 15-Min-Takt)
             for(let i = 0; i < data.minutely_15.time.length; i++) {
-                // Wir zeigen nur jede 4. Zeile (jede Stunde), um es auf dem Handy lesbar zu halten
-                // Wenn du alle 15 Min willst, nimm if (true)
-                if (i % 4 === 0) { 
-                    const time = data.minutely_15.time[i].split('T')[1].substring(0,5);
-                    html += `<tr>
-                        <td>${time}</td>
-                        <td>${data.minutely_15.temperature_2m[i]}</td>
-                        <td>${data.minutely_15.precipitation[i]}</td>
-                        <td>${data.minutely_15.cloud_cover[i]}</td>
-                    </tr>`;
-                }
+                const time = data.minutely_15.time[i].split('T')[1].substring(0,5);
+                html += `<tr>
+                    <td>${time}</td>
+                    <td>${data.minutely_15.temperature_2m[i]}</td>
+                    <td>${data.minutely_15.relative_humidity_2m[i]}</td>
+                    <td>${data.minutely_15.precipitation[i]}</td>
+                    <td>${data.minutely_15.precipitation_probability[i]}</td>
+                    <td>${data.minutely_15.cloud_cover[i]}</td>
+                    <td>${data.minutely_15.wind_speed_10m[i]}</td>
+                    <td>${data.minutely_15.wind_gusts_10m[i]}</td>
+                </tr>`;
             }
-            html += '</table>';
-            container.innerHTML += html;
+            html += '</table></div>';
+            container.innerHTML = html;
         }
 
         async function searchCity() {
             const city = document.getElementById('cityInput').value;
+            document.getElementById('status').innerText = "Status: Suche Geokoordinaten...";
             const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
             const data = await res.json();
             if (data.results) {
@@ -83,10 +100,18 @@
         }
 
         function getLocation() {
-            if (!navigator.geolocation) { alert("GPS not supported"); return; }
+            const btn = document.getElementById('gpsBtn');
+            const status = document.getElementById('status');
+            btn.innerText = "Suche Standort...";
+            
+            if (!navigator.geolocation) { alert("GPS nicht unterstützt"); return; }
             navigator.geolocation.getCurrentPosition(pos => {
-                fetchWeather(pos.coords.latitude, pos.coords.longitude, "GPS Position");
-            }, err => alert("GPS denied."));
+                btn.innerText = "GPS Standort";
+                fetchWeather(pos.coords.latitude, pos.coords.longitude, "GPS Position (" + pos.coords.latitude.toFixed(2) + ", " + pos.coords.longitude.toFixed(2) + ")");
+            }, err => {
+                btn.innerText = "GPS Standort";
+                status.innerText = "Status: Zugriff verweigert.";
+            });
         }
     </script>
 </body>
