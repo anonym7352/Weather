@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weather Engineering Terminal v8.1</title>
+    <title>Weather Engineering Terminal v8.2</title>
     <style>
         body { background: #050505; color: #00ff41; font-family: 'Courier New', Courier, monospace; padding: 10px; }
         .container { max-width: 1000px; margin: auto; }
@@ -24,7 +24,9 @@
 </head>
 <body>
     <div class="container">
-        <h1>Weather Engineering Terminal v8.1</h1>
+        <h1>Weather Engineering Console v8.2</h1>
+        <div id="locationDisplay" style="font-weight: bold; margin-bottom: 10px; color: #fff;">Kein Standort gewählt</div>
+        
         <input type="text" id="cityInput" placeholder="Stadtname...">
         <input type="date" id="dateInput">
         <button onclick="searchCity()">Daten abrufen</button>
@@ -50,14 +52,12 @@
     <script>
         document.getElementById('dateInput').valueAsDate = new Date();
 
-        async function fetchWeather(lat, lon, name) {
+        async function fetchWeather(lat, lon, name, country) {
             const date = document.getElementById('dateInput').value;
             const today = new Date().toISOString().split('T')[0];
-            
-            // Logik: Ist das Datum in der Vergangenheit? Dann Archive-API nutzen
-            const baseUrl = (date < today) 
-                ? "https://archive-api.open-meteo.com/v1/archive" 
-                : "https://api.open-meteo.com/v1/forecast";
+            const baseUrl = (date < today) ? "https://archive-api.open-meteo.com/v1/archive" : "https://api.open-meteo.com/v1/forecast";
+
+            document.getElementById('locationDisplay').innerText = `${name}, ${country || ''}`;
 
             const url = `${baseUrl}?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&minutely_15=temperature_2m,relative_humidity_2m,precipitation,precipitation_probability,cloud_cover,wind_speed_10m,wind_gusts_10m,uv_index,shortwave_radiation,weather_code,snowfall&timezone=auto`;
             
@@ -85,24 +85,19 @@
                 for(let i = p.start; i < p.end; i++) {
                     let timeStr = data.minutely_15.time[i].split('T')[1].substring(0,5);
                     let wCode = data.minutely_15.weather_code[i];
-                    
                     if([95, 96, 99].includes(wCode)) alerts.push(`GEWITTER um ${timeStr}`);
                     if(data.minutely_15.precipitation[i] > 0.5) alerts.push(`REGENSTOSS (${data.minutely_15.precipitation[i]}mm) um ${timeStr}`);
                     if(data.minutely_15.snowfall[i] > 0) alerts.push(`SCHNEE (${data.minutely_15.snowfall[i]}cm) um ${timeStr}`);
                     if(data.minutely_15.temperature_2m[i] <= 0 && data.minutely_15.precipitation[i] > 0) alerts.push(`GLATTEIS-RISIKO um ${timeStr}`);
                 }
-
                 let rain = data.minutely_15.precipitation.slice(p.start, p.end);
                 let sun = data.minutely_15.shortwave_radiation.slice(p.start, p.end);
                 let avgR = (rain.reduce((a,b)=>a+b, 0) > 0.5) ? "Regen=ja" : "Regen=kaum";
                 let avgS = (Math.max(...sun) > 300) ? "Sonne=viel" : "Sonne=wenig";
-                
                 let alertHtml = alerts.length > 0 ? `<div class="warning">${alerts.slice(0,2).join('<br>')}</div>` : "";
-                
                 container.innerHTML += `<div class="phase-panel"><strong>${p.name}</strong><br>${avgR}, ${avgS}${alertHtml}</div>`;
             });
 
-            // Tabelle
             let html = `<div class="table-container"><table><tr><th>Zeit</th><th>°C</th><th>Rad</th><th>UV</th><th>Hum%</th><th>Regen</th><th>P%</th><th>Wind</th><th>Böe</th></tr>`;
             for(let i = 0; i < data.minutely_15.time.length; i++) {
                 html += `<tr><td>${data.minutely_15.time[i].split('T')[1].substring(0,5)}</td>
@@ -120,15 +115,18 @@
         }
 
         async function searchCity() {
-            const city = document.getElementById8('cityInput').value; // Kleiner Fix hier: ID korrekt
+            const city = document.getElementById('cityInput').value;
             const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
             const data = await res.json();
-            if (data.results) fetchWeather(data.results[0].latitude, data.results[0].longitude, data.results[0].name);
+            if (data.results) {
+                const r = data.results[0];
+                fetchWeather(r.latitude, r.longitude, r.name, r.country);
+            }
         }
         
         function getLocation() {
             navigator.geolocation.getCurrentPosition(pos => {
-                fetchWeather(pos.coords.latitude, pos.coords.longitude, "GPS Position");
+                fetchWeather(pos.coords.latitude, pos.coords.longitude, "GPS Position", "Lokaler Standort");
             });
         }
     </script>
