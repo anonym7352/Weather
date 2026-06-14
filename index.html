@@ -50,28 +50,23 @@
             const isArchive = date < today;
             
             const baseUrl = isArchive ? "https://archive-api.open-meteo.com/v1/archive" : "https://api.open-meteo.com/v1/forecast";
-            
-            // Wichtig: Archiv nutzt z.T. andere Parameter-Namen. precipitation_sum ist im Archiv oft Standard.
-            const url = `${baseUrl}?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&minutely_15=temperature_2m,relative_humidity_2m,precipitation,rain,snowfall,weather_code,wind_speed_10m,wind_gusts_10m,uv_index,shortwave_radiation&timezone=auto`;
+            // Archive API benötigt 'minutely_15' als 'minutely_15' Parameter, aber die Zeitstempel sind bei Archiv oft anders abrufbar.
+            const url = `${baseUrl}?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&minutely_15=temperature_2m,relative_humidity_2m,precipitation,precipitation_probability,cloud_cover,wind_speed_10m,wind_gusts_10m,uv_index,shortwave_radiation,weather_code,snowfall&timezone=auto`;
             
             document.getElementById('locationDisplay').innerText = `${name}, ${country || 'Lokaler Standort'}`;
 
             const res = await fetch(url);
             const data = await res.json();
-            
-            // Normalisierung: Archiv liefert manchmal 'rain' statt 'precipitation'
-            if(data.minutely_15) {
-                data.minutely_15.precipitation = data.minutely_15.precipitation || data.minutely_15.rain || new Array(96).fill(0);
-                renderAll(data, name);
-            } else {
-                alert("Keine Daten für dieses Datum verfügbar.");
-            }
+            renderAll(data, name);
         }
 
         function renderAll(data, name) {
             const container = document.getElementById('summary-container');
             container.innerHTML = `<h2>Analyse: ${name}</h2>`;
             
+            // Sicherstellen, dass Daten vorhanden sind (Archive gibt manchmal leere Arrays bei Fehlern zurück)
+            if (!data.minutely_15) { container.innerHTML += "<div class='warning'>Fehler: Keine Daten für diesen Zeitraum gefunden.</div>"; return; }
+
             const phases = [
                 {name: "Früher Morgen (00-06)", start: 0, end: 24},
                 {name: "Vormittag (06-12)", start: 24, end: 48},
@@ -87,27 +82,30 @@
                 for(let i = p.start; i < p.end; i++) {
                     let timeStr = data.minutely_15.time[i].split('T')[1].substring(0,5);
                     let wCode = data.minutely_15.weather_code[i];
-                    if(wCode && [95, 96, 99].includes(wCode)) alerts.push(`GEWITTER um ${timeStr}`);
+                    if([95, 96, 99].includes(wCode)) alerts.push(`GEWITTER um ${timeStr}`);
                     if(data.minutely_15.precipitation[i] > 0.5) alerts.push(`REGENSTOSS (${data.minutely_15.precipitation[i]}mm) um ${timeStr}`);
                     if(data.minutely_15.snowfall[i] > 0) alerts.push(`SCHNEE (${data.minutely_15.snowfall[i]}cm) um ${timeStr}`);
                     if(data.minutely_15.temperature_2m[i] <= 0 && data.minutely_15.precipitation[i] > 0) alerts.push(`GLATTEIS-RISIKO um ${timeStr}`);
                 }
                 let rain = data.minutely_15.precipitation.slice(p.start, p.end);
+                let sun = data.minutely_15.shortwave_radiation.slice(p.start, p.end);
                 let avgR = (rain.reduce((a,b)=>a+b, 0) > 0.5) ? "Regen=ja" : "Regen=kaum";
+                let avgS = (Math.max(...sun) > 300) ? "Sonne=viel" : "Sonne=wenig";
                 let alertHtml = alerts.length > 0 ? `<div class="warning">${alerts.slice(0,2).join('<br>')}</div>` : "";
-                container.innerHTML += `<div class="phase-panel"><strong>${p.name}</strong><br>${avgR}${alertHtml}</div>`;
+                container.innerHTML += `<div class="phase-panel"><strong>${p.name}</strong><br>${avgR}, ${avgS}${alertHtml}</div>`;
             });
 
-            let html = `<div class="table-container"><table><tr><th>Zeit</th><th>°C</th><th>Rad</th><th>UV</th><th>Hum%</th><th>Regen</th><th>Wind</th><th>Böe</th></tr>`;
+            let html = `<div class="table-container"><table><tr><th>Zeit</th><th>°C</th><th>Rad</th><th>UV</th><th>Hum%</th><th>Regen</th><th>P%</th><th>Wind</th><th>Böe</th></tr>`;
             for(let i = 0; i < data.minutely_15.time.length; i++) {
                 html += `<tr><td>${data.minutely_15.time[i].split('T')[1].substring(0,5)}</td>
-                    <td>${data.minutely_15.temperature_2m[i] ?? '-'}</td>
-                    <td>${Math.round(data.minutely_15.shortwave_radiation[i] ?? 0)}</td>
-                    <td>${data.minutely_15.uv_index[i] ?? 0}</td>
-                    <td>${data.minutely_15.relative_humidity_2m[i] ?? '-'}</td>
-                    <td>${data.minutely_15.precipitation[i] ?? 0}</td>
-                    <td>${data.minutely_15.wind_speed_10m[i] ?? 0}</td>
-                    <td>${data.minutely_15.wind_gusts_10m[i] ?? 0}</td>
+                    <td>${data.minutely_15.temperature_2m[i]}</td>
+                    <td>${Math.round(data.minutely_15.shortwave_radiation[i] || 0)}</td>
+                    <td>${data.minutely_15.uv_index[i] || 0}</td>
+                    <td>${data.minutely_15.relative_humidity_2m[i]}</td>
+                    <td>${data.minutely_15.precipitation[i]}</td>
+                    <td>${data.minutely_15.precipitation_probability[i] || 0}</td>
+                    <td>${data.minutely_15.wind_speed_10m[i]}</td>
+                    <td>${data.minutely_15.wind_gusts_10m[i]}</td>
                 </tr>`;
             }
             container.innerHTML += html + '</table></div>';
