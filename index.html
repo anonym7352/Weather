@@ -3,16 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weather Engineering Terminal v4.0</title>
+    <title>Weather Engineering Terminal v5.0</title>
     <style>
         body { background: #050505; color: #00ff41; font-family: 'Courier New', Courier, monospace; padding: 10px; }
         .container { max-width: 1000px; margin: auto; }
         input, button { background: #000; color: #00ff41; border: 1px solid #00ff41; padding: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; }
         
         .table-container { overflow-y: auto; max-height: 60vh; border: 1px solid #00ff41; margin-top: 15px; }
-        table { width: 100%; border-collapse: collapse; font-size: 0.75em; }
-        th { position: sticky; top: 0; background: #000; padding: 10px; border: 1px solid #00ff41; z-index: 10; }
-        td { border: 1px solid #333; padding: 6px; text-align: right; white-space: nowrap; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.70em; }
+        th { position: sticky; top: 0; background: #000; padding: 8px; border: 1px solid #00ff41; z-index: 10; }
+        td { border: 1px solid #333; padding: 5px; text-align: right; white-space: nowrap; }
         
         .current-row { background: #00ff4133; color: #fff; font-weight: bold; border-top: 2px solid #00ff41; border-bottom: 2px solid #00ff41; }
         .tz-info { font-size: 0.7em; color: #888; margin-bottom: 10px; }
@@ -24,7 +24,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>Weather Engineering Console v4.0</h1>
+        <h1>Weather Engineering Console v5.0</h1>
         <div id="tzInfo" class="tz-info">Zone: Erkenne Zeitzone...</div>
         
         <input type="text" id="cityInput" placeholder="Stadtname...">
@@ -37,10 +37,11 @@
         <details>
             <summary>Parameter Legende</summary>
             <ul>
-                <li><strong>°C:</strong> Temperatur auf 2m.</li>
-                <li><strong>Hum%:</strong> Relative Luftfeuchtigkeit (Werte >90% deuten auf Nebel/Tau).</li>
+                <li><strong>°C:</strong> Lufttemp (Schatten).</li>
+                <li><strong>Rad (W/m²):</strong> Kurzwellige Sonneneinstrahlung. >500 = "Knallige Sonne", <100 = Bewölkt/Dämmerung.</li>
+                <li><strong>UV:</strong> UV-Index (Intensität der Sonnenstrahlung).</li>
+                <li><strong>Hum%:</strong> Luftfeuchtigkeit.</li>
                 <li><strong>P%:</strong> Regenwahrscheinlichkeit.</li>
-                <li><strong>Wind/Böe:</strong> Durchschnitt vs. Böe (Stabilität der Wetterlage).</li>
             </ul>
         </details>
         
@@ -48,7 +49,6 @@
     </div>
 
     <script>
-        // Zeitzone bei Start anzeigen
         document.getElementById('tzInfo').innerText = "Zone: " + Intl.DateTimeFormat().resolvedOptions().timeZone;
         document.getElementById('dateInput').valueAsDate = new Date();
 
@@ -59,8 +59,6 @@
             const day = now.getDate().toString().padStart(2, '0');
             const hours = now.getHours().toString().padStart(2, '0');
             const mins = (Math.floor(now.getMinutes() / 15) * 15).toString().padStart(2, '0');
-            
-            // Gibt Format "YYYY-MM-DDTHH:MM" zurück, passend zum API-Format
             return `${year}-${month}-${day}T${hours}:${mins}`;
         }
 
@@ -69,8 +67,8 @@
             const date = document.getElementById('dateInput').value;
             status.innerText = `Lade Daten für ${name}...`;
             
-            // timezone=auto sorgt dafür, dass die Zeiten in der API lokal sind
-            const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&minutely_15=temperature_2m,relative_humidity_2m,precipitation,precipitation_probability,cloud_cover,wind_speed_10m,wind_gusts_10m&daily=sunrise,sunset&timezone=auto`;
+            // Neu: uv_index und shortwave_radiation hinzugefügt
+            const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&minutely_15=temperature_2m,relative_humidity_2m,precipitation,precipitation_probability,cloud_cover,wind_speed_10m,wind_gusts_10m,uv_index,shortwave_radiation&daily=sunrise,sunset&timezone=auto`;
             
             try {
                 const res = await fetch(url);
@@ -85,26 +83,25 @@
         function renderData(data, name) {
             const container = document.getElementById('results');
             const nowStr = getNowString(); 
-            const selectedDate = document.getElementById('dateInput').value;
-            const isToday = (selectedDate === new Date().toISOString().split('T')[0]);
+            const isToday = (document.getElementById('dateInput').value === new Date().toISOString().split('T')[0]);
 
             let html = `<div class="table-container"><table>
-                        <tr><th>Zeit</th><th>°C</th><th>Hum%</th><th>Regen</th><th>P%</th><th>Wolken%</th><th>Wind</th><th>Böe</th></tr>`;
+                        <tr><th>Zeit</th><th>°C</th><th>Rad</th><th>UV</th><th>Hum%</th><th>P%</th><th>Wolken%</th><th>Wind</th></tr>`;
             
             for(let i = 0; i < data.minutely_15.time.length; i++) {
-                const rowTime = data.minutely_15.time[i]; // Format "YYYY-MM-DDTHH:MM"
+                const rowTime = data.minutely_15.time[i];
                 const displayTime = rowTime.split('T')[1].substring(0,5);
                 const isCurrent = (isToday && rowTime === nowStr);
                 
                 html += `<tr class="${isCurrent ? 'current-row' : ''}">
                     <td>${isCurrent ? '▶ ' : ''}${displayTime}</td>
                     <td>${data.minutely_15.temperature_2m[i]}</td>
+                    <td>${Math.round(data.minutely_15.shortwave_radiation[i])}</td>
+                    <td>${data.minutely_15.uv_index[i]}</td>
                     <td>${data.minutely_15.relative_humidity_2m[i]}</td>
-                    <td>${data.minutely_15.precipitation[i]}</td>
                     <td>${data.minutely_15.precipitation_probability[i]}</td>
                     <td>${data.minutely_15.cloud_cover[i]}</td>
                     <td>${data.minutely_15.wind_speed_10m[i]}</td>
-                    <td>${data.minutely_15.wind_gusts_10m[i]}</td>
                 </tr>`;
             }
             html += '</table></div>';
