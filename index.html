@@ -3,77 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weather Engineering Terminal</title>
+    <title>Weather Engineering Terminal v3.0</title>
     <style>
         body { background: #050505; color: #00ff41; font-family: 'Courier New', Courier, monospace; padding: 10px; }
         .container { max-width: 1000px; margin: auto; }
         input, button { background: #000; color: #00ff41; border: 1px solid #00ff41; padding: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; }
         
-        /* Tabelle Scrollbar für mobile */
-        .table-container { overflow-x: auto; margin-top: 15px; border: 1px solid #333; }
+        /* Tabelle mit Sticky Header */
+        .table-container { overflow-y: auto; max-height: 50vh; border: 1px solid #00ff41; margin-top: 15px; }
         table { width: 100%; border-collapse: collapse; font-size: 0.75em; }
-        th, td { border: 1px solid #333; padding: 6px; text-align: right; white-space: nowrap; }
-        th { background: #111; text-align: center; }
+        th { position: sticky; top: 0; background: #000; padding: 10px; border: 1px solid #00ff41; z-index: 10; }
+        td { border: 1px solid #333; padding: 6px; text-align: right; white-space: nowrap; }
+        
+        .current-row { background: #00ff4133; color: #fff; font-weight: bold; border-top: 2px solid #00ff41; border-bottom: 2px solid #00ff41; }
         
         .status-box { font-size: 0.8em; color: #aaa; margin: 10px 0; }
-        .info-panel { border: 1px solid #00ff41; padding: 10px; margin-top: 10px; }
-        h2 { font-size: 1em; border-bottom: 1px solid #333; }
+        details { border: 1px solid #333; margin-top: 10px; padding: 5px; font-size: 0.8em; }
+        summary { cursor: pointer; color: #ffaa00; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Weather Engineering Console v2.0</h1>
-        <input type="text" id="cityInput" placeholder="Stadtname (z.B. Lübeck)">
+        <h1>Weather Engineering Console v3.0</h1>
+        <input type="text" id="cityInput" placeholder="Stadtname...">
         <input type="date" id="dateInput">
         <button onclick="searchCity()">Daten abrufen</button>
         <button id="gpsBtn" onclick="getLocation()">GPS Standort</button>
 
         <div id="status" class="status-box">Status: Standby</div>
+        
+        <details>
+            <summary>Parameter Erklärung (Legende)</summary>
+            <ul>
+                <li><strong>°C:</strong> Lufttemperatur auf 2m Höhe.</li>
+                <li><strong>Hum%:</strong> Relative Luftfeuchtigkeit. Wert > 90% bei niedrigen Wolken = Nebelgefahr.</li>
+                <li><strong>P(%):</strong> Regenwahrscheinlichkeit in Prozent.</li>
+                <li><strong>Wolken%:</strong> Bedeckungsgrad des Himmels.</li>
+                <li><strong>Wind:</strong> Durchschnittsgeschwindigkeit auf 10m Höhe.</li>
+                <li><strong>Böe:</strong> Kurzzeitige Spitzenwindgeschwindigkeit (wichtig für Sturmböen).</li>
+            </ul>
+        </details>
+        
         <div id="results"></div>
     </div>
 
     <script>
         document.getElementById('dateInput').valueAsDate = new Date();
 
+        function getNowString() {
+            const now = new Date();
+            // Rundet auf die nächsten 15 Minuten ab
+            now.setMinutes(Math.floor(now.getMinutes() / 15) * 15);
+            now.setSeconds(0);
+            return now.toISOString().substring(0, 16); // Format YYYY-MM-DDTHH:MM
+        }
+
         async function fetchWeather(lat, lon, name) {
             const status = document.getElementById('status');
             const date = document.getElementById('dateInput').value;
-            status.innerText = `Status: Lade Daten für ${name} (Modell: ICON-D2 / ECMWF)...`;
+            status.innerText = `Lade Daten für ${name}...`;
             
-            // API call inklusive aller technischen Parameter
             const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&minutely_15=temperature_2m,relative_humidity_2m,precipitation,precipitation_probability,cloud_cover,wind_speed_10m,wind_gusts_10m&daily=sunrise,sunset&timezone=auto`;
             
             try {
                 const res = await fetch(url);
                 const data = await res.json();
                 renderData(data, name);
-                status.innerText = "Status: Datenübertragung abgeschlossen.";
+                status.innerText = "Status: OK.";
             } catch (e) {
-                status.innerText = "Status: ERROR " + e;
+                status.innerText = "ERROR: " + e;
             }
         }
 
         function renderData(data, name) {
             const container = document.getElementById('results');
-            const sunrise = data.daily.sunrise[0].split('T')[1];
-            const sunset = data.daily.sunset[0].split('T')[1];
-            
-            let html = `
-                <div class="info-panel">
-                    <h2>Terminal: ${name}</h2>
-                    <p>Sonnenaufgang: ${sunrise} | Sonnenuntergang: ${sunset}</p>
-                    <p style="font-size: 0.7em;">Quelle: Offene Wettermodelle (DWD/ECMWF)</p>
-                </div>
-                <div class="table-container">
-                    <table>
-                        <tr>
-                            <th>Zeit</th><th>°C</th><th>Hum%</th><th>Regen mm</th><th>P(%)</th><th>Wolken%</th><th>Wind km/h</th><th>Böe km/h</th>
-                        </tr>`;
+            const nowStr = getNowString(); // Zeit für Markierung
+            const selectedDate = document.getElementById('dateInput').value;
+            const isToday = (selectedDate === new Date().toISOString().split('T')[0]);
+
+            let html = `<div class="table-container"><table>
+                        <tr><th>Zeit</th><th>°C</th><th>Hum%</th><th>Regen</th><th>P%</th><th>Wolken%</th><th>Wind</th><th>Böe</th></tr>`;
             
             for(let i = 0; i < data.minutely_15.time.length; i++) {
-                const time = data.minutely_15.time[i].split('T')[1].substring(0,5);
-                html += `<tr>
-                    <td>${time}</td>
+                const rowTime = data.minutely_15.time[i]; // Format YYYY-MM-DDTHH:MM
+                const displayTime = rowTime.split('T')[1].substring(0,5);
+                const isCurrent = (isToday && rowTime === nowStr);
+                
+                html += `<tr class="${isCurrent ? 'current-row' : ''}">
+                    <td>${displayTime} ${isCurrent ? '◀' : ''}</td>
                     <td>${data.minutely_15.temperature_2m[i]}</td>
                     <td>${data.minutely_15.relative_humidity_2m[i]}</td>
                     <td>${data.minutely_15.precipitation[i]}</td>
@@ -89,28 +106,16 @@
 
         async function searchCity() {
             const city = document.getElementById('cityInput').value;
-            document.getElementById('status').innerText = "Status: Suche Geokoordinaten...";
             const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
             const data = await res.json();
             if (data.results) {
                 fetchWeather(data.results[0].latitude, data.results[0].longitude, data.results[0].name);
-            } else {
-                alert("Location not found.");
             }
         }
 
         function getLocation() {
-            const btn = document.getElementById('gpsBtn');
-            const status = document.getElementById('status');
-            btn.innerText = "Suche Standort...";
-            
-            if (!navigator.geolocation) { alert("GPS nicht unterstützt"); return; }
             navigator.geolocation.getCurrentPosition(pos => {
-                btn.innerText = "GPS Standort";
-                fetchWeather(pos.coords.latitude, pos.coords.longitude, "GPS Position (" + pos.coords.latitude.toFixed(2) + ", " + pos.coords.longitude.toFixed(2) + ")");
-            }, err => {
-                btn.innerText = "GPS Standort";
-                status.innerText = "Status: Zugriff verweigert.";
+                fetchWeather(pos.coords.latitude, pos.coords.longitude, "GPS Position");
             });
         }
     </script>
