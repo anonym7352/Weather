@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weather Engineering Terminal v8.0</title>
+    <title>Weather Engineering Terminal v8.1</title>
     <style>
         body { background: #050505; color: #00ff41; font-family: 'Courier New', Courier, monospace; padding: 10px; }
         .container { max-width: 1000px; margin: auto; }
@@ -24,7 +24,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>Weather Engineering Terminal v8.0</h1>
+        <h1>Weather Engineering Terminal v8.1</h1>
         <input type="text" id="cityInput" placeholder="Stadtname...">
         <input type="date" id="dateInput">
         <button onclick="searchCity()">Daten abrufen</button>
@@ -52,8 +52,14 @@
 
         async function fetchWeather(lat, lon, name) {
             const date = document.getElementById('dateInput').value;
-            // WICHTIG: weather_code für Gewitter/Schnee und snowfall für Glatteis-Analyse
-            const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&minutely_15=temperature_2m,relative_humidity_2m,precipitation,precipitation_probability,cloud_cover,wind_speed_10m,wind_gusts_10m,uv_index,shortwave_radiation,weather_code,snowfall&timezone=auto`;
+            const today = new Date().toISOString().split('T')[0];
+            
+            // Logik: Ist das Datum in der Vergangenheit? Dann Archive-API nutzen
+            const baseUrl = (date < today) 
+                ? "https://archive-api.open-meteo.com/v1/archive" 
+                : "https://api.open-meteo.com/v1/forecast";
+
+            const url = `${baseUrl}?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&minutely_15=temperature_2m,relative_humidity_2m,precipitation,precipitation_probability,cloud_cover,wind_speed_10m,wind_gusts_10m,uv_index,shortwave_radiation,weather_code,snowfall&timezone=auto`;
             
             const res = await fetch(url);
             const data = await res.json();
@@ -76,19 +82,14 @@
                 if(segment.length === 0) return;
                 
                 let alerts = [];
-                // Analyse auf Gefahren im Block
                 for(let i = p.start; i < p.end; i++) {
                     let timeStr = data.minutely_15.time[i].split('T')[1].substring(0,5);
                     let wCode = data.minutely_15.weather_code[i];
                     
-                    // Gewitter: WMO Codes 95, 96, 99
-                    if([95, 96, 99].includes(wCode)) alerts.push(`GEWITTER-RISIKO um ${timeStr}`);
-                    // Regenstoß
+                    if([95, 96, 99].includes(wCode)) alerts.push(`GEWITTER um ${timeStr}`);
                     if(data.minutely_15.precipitation[i] > 0.5) alerts.push(`REGENSTOSS (${data.minutely_15.precipitation[i]}mm) um ${timeStr}`);
-                    // Schnee
                     if(data.minutely_15.snowfall[i] > 0) alerts.push(`SCHNEE (${data.minutely_15.snowfall[i]}cm) um ${timeStr}`);
-                    // Glatteis
-                    if(data.minutely_15.temperature_2m[i] <= 0 && data.minutely_15.precipitation[i] > 0) alerts.push(`GLATTEIS-GEFAHR um ${timeStr}`);
+                    if(data.minutely_15.temperature_2m[i] <= 0 && data.minutely_15.precipitation[i] > 0) alerts.push(`GLATTEIS-RISIKO um ${timeStr}`);
                 }
 
                 let rain = data.minutely_15.precipitation.slice(p.start, p.end);
@@ -106,11 +107,11 @@
             for(let i = 0; i < data.minutely_15.time.length; i++) {
                 html += `<tr><td>${data.minutely_15.time[i].split('T')[1].substring(0,5)}</td>
                     <td>${data.minutely_15.temperature_2m[i]}</td>
-                    <td>${Math.round(data.minutely_15.shortwave_radiation[i])}</td>
-                    <td>${data.minutely_15.uv_index[i]}</td>
+                    <td>${Math.round(data.minutely_15.shortwave_radiation[i] || 0)}</td>
+                    <td>${data.minutely_15.uv_index[i] || 0}</td>
                     <td>${data.minutely_15.relative_humidity_2m[i]}</td>
                     <td>${data.minutely_15.precipitation[i]}</td>
-                    <td>${data.minutely_15.precipitation_probability[i]}</td>
+                    <td>${data.minutely_15.precipitation_probability[i] || 0}</td>
                     <td>${data.minutely_15.wind_speed_10m[i]}</td>
                     <td>${data.minutely_15.wind_gusts_10m[i]}</td>
                 </tr>`;
@@ -119,7 +120,7 @@
         }
 
         async function searchCity() {
-            const city = document.getElementById('cityInput').value;
+            const city = document.getElementById8('cityInput').value; // Kleiner Fix hier: ID korrekt
             const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
             const data = await res.json();
             if (data.results) fetchWeather(data.results[0].latitude, data.results[0].longitude, data.results[0].name);
