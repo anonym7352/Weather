@@ -64,7 +64,7 @@
         async function fetchData(lat, lon, name, country) {
             setStatus("wird geladen...");
             if(!lat) {
-                const city = startCountdown(60);
+                const city = document.getElementById('cityInput').value;
                 if(!city) { setStatus("Fehler: Keine Stadt!"); return; }
                 const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
                 const data = await res.json();
@@ -103,7 +103,7 @@
             };
             
             renderAll(d, name);
-            document.getElementById('meta-info').innerText = `Datenstand: ${new Date().toLocaleTimeString()} | Nächstes Update: automatisch in 10 Min.`;
+            startCountdown(60);
         }
 
         function renderAll(d, name) {
