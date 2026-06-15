@@ -134,12 +134,12 @@
                 let desc = `<b>${d.time[start].split('T')[1].substring(0,5)} - ${d.time[end-1].split('T')[1].substring(0,5)} Uhr:</b><br>`;
                 
                 // Temperatur
-                if (avgT < 5) desc += "Eiskalt (" + avgT.toFixed(1) + "°C), ";
+                if (avgT < 0) desc += "Eiskalt (" + avgT.toFixed(1) + "°C), ";
                 else if (avgT < 10) desc += "Kalt (" + avgT.toFixed(1) + "°C), ";
-                else if (avgT < 15) desc += "Kühl (" + avgT.toFixed(1) + "°C), ";
-                else if (avgT < 20) desc += "Warm, (" + avgT.toFixed(1) + "°C), ";
-                else if (avgT < 25) desc += "Sehr Warm (" + avgT.toFixed(1) + "°C), ";
-                else if (avgT < 30) desc += "Extrem Warm (" + avgT.toFixed(1) + "°C), ";
+                else if (avgT < 18) desc += "Kühl (" + avgT.toFixed(1) + "°C), ";
+                else if (avgT < 25) desc += "Warm, (" + avgT.toFixed(1) + "°C), ";
+                else if (avgT < 30) desc += "Sehr Warm (" + avgT.toFixed(1) + "°C), ";
+                else if (avgT < 35) desc += "Extrem Warm (" + avgT.toFixed(1) + "°C), ";
                 else desc += "Heiß (" + avgT.toFixed(1) + "°C), ";
 
                 // Bewölkung & Sonne
@@ -162,10 +162,13 @@
                 `<br> Starkregen (${sumR.toFixed(1)}mm)!!!`;
 
                 // Wind
-                if (maxW > 50) desc += " | Extrem Windig (" + Math.round(maxW) + "km/h)";
-                else if (maxW > 30) desc += " | Windig (" + Math.round(maxW) + "km/h)";
-                else if (maxW > 10) desc += " | Leichter Wind (" + Math.round(maxW) + "km/h)";
-                else desc += " | Windstill";
+               const val = Math.round(maxW);
+                desc += (val <= 5) ? " | Windstill" :
+                        (val <= 20) ? ` | Leichter Wind (${val}km/h)` :
+                        (val <= 40) ? ` | Mäßiger Wind (${val}km/h)` :
+                        (val <= 60) ? ` | Frischer Wind (${val}km/h)` :
+                        (val <= 80) ? ` | Starker Wind (${val}km/h)` :
+                        ` | Sturm (${val}km/h)`;
 
                let alerts = [];
                 let ongoing = {}; // Speichert aktive Ereignisse: { "Titel": { start: "HH:MM" } }
