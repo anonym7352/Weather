@@ -114,39 +114,26 @@
             const container = document.getElementById('summary-container');
             container.innerHTML = `<h2>Analyse: ${name}</h2>`;
 
-            // Hilfsfunktion für Statistiken
-            const getStats = (arr) => ({
-                avg: (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1),
+            // Hilfsfunktion für saubere Berechnungen
+            const calc = (arr) => ({
                 min: Math.min(...arr).toFixed(1),
-                max: Math.max(...arr).toFixed(1)
+                max: Math.max(...arr).toFixed(1),
+                sum: arr.reduce((a, b) => a + b, 0).toFixed(1)
             });
 
-            // Hilfsfunktion für die 3-Zeilen-Ansicht
-            const createStatBlock = (title, stats, unit) => `
-                <div style="margin: 5px 0; padding: 5px; border: 1px solid #333; font-size: 0.8em;">
-                    <div style="color: #00ff41;">Ø ${title}: ${stats.avg}${unit}</div>
-                    <div style="color: #ffaa00;">Max ${title}: ${stats.max}${unit}</div>
-                    <div style="color: #00ccff;">Min ${title}: ${stats.min}${unit}</div>
-                </div>`;
-
-            // 1. Tages-Gesamtübersicht
-            const dT = getStats(d.temp);
-            const dH = getStats(d.hum);
-            const dW = getStats(d.wind);
-            const dRad = getStats(d.rad);
-
+            // 1. Tages-Gesamtübersicht (Ganz oben)
+            const tDay = calc(d.temp);
+            const pDay = calc(d.prob);
+            const wDay = calc(d.wind);
+            
             container.innerHTML += `
-                <div class="phase-panel" style="border-color: #00ff41;">
-                    <strong>Tagesübersicht (Gesamt)</strong>
-                    <div style="display: flex; flex-wrap: wrap; gap: 5px;">
-                        ${createStatBlock("Temp", dT, "°C")}
-                        ${createStatBlock("Hum", dH, "%")}
-                        ${createStatBlock("Wind", dW, "km/h")}
-                        ${createStatBlock("Rad", dRad, " W/m²")}
-                    </div>
+                <div class="phase-panel" style="border-color: #fff;">
+                    <strong>Gesamttag (${name})</strong><br>
+                    Höchstwerte: Temp (${tDay.max}°C) | Regen (${pDay.max}% Wkt / ${d.rain.reduce((a,b)=>a+b, 0).toFixed(1)}mm) | Wind (${Math.max(...d.wind)} km/h)<br>
+                    Tiefstwerte: Temp (${tDay.min}°C) | Regen (${pDay.min}% Wkt) | Wind (${Math.min(...d.wind)} km/h)
                 </div>`;
 
-            // 2. Tagesabschnitte
+            // 2. Tagesabschnitte (Loop)
             const chunks = 8; 
             const step = Math.floor(d.time.length / chunks);
             for (let i = 0; i < chunks; i++) {
@@ -156,14 +143,14 @@
                 let slice = d.time.slice(start, end);
                 if (slice.length === 0) continue;
 
-                // Berechnungen für den Block
+                // Deine Original-Variablen für den Text
                 let avgT = d.temp.slice(start, end).reduce((a,b)=>a+b, 0) / slice.length;
                 let maxW = Math.max(...d.wind.slice(start, end));
                 let sumR = d.rain.slice(start, end).reduce((a,b)=>a+b, 0);
                 let maxS = Math.max(...d.rad.slice(start, end));
                 let avgCloud = d.cloud.slice(start, end).reduce((a,b)=>a+b, 0) / slice.length;
 
-                // --- DEINE TEXTE (Bleiben unverändert) ---
+                // --- ORIGINAL TEXT-LOGIK (Unverändert) ---
                 let desc = `<b>${d.time[start].split('T')[1].substring(0,5)} - ${d.time[end-1].split('T')[1].substring(0,5)} Uhr:</b><br>`;
                 if (avgT < 0) desc += "Eiskalt (" + avgT.toFixed(1) + "°C), ";
                 else if (avgT < 10) desc += "Kalt (" + avgT.toFixed(1) + "°C), ";
@@ -172,32 +159,36 @@
                 else if (avgT < 30) desc += "Sehr Warm (" + avgT.toFixed(1) + "°C), ";
                 else if (avgT < 35) desc += "Extrem Warm (" + avgT.toFixed(1) + "°C), ";
                 else desc += "Heiß (" + avgT.toFixed(1) + "°C), ";
+
                 if (avgCloud > 80) desc += "Stark Bewölkt";
                 else if (avgCloud > 50) desc += "Deutlich Bewölkt";
                 else if (avgCloud > 20) desc += "Leicht Bewölkt";
                 else desc += "klar";
+
                 desc += (maxS > 800 ? " (Sonne intensiv)" : maxS > 500 ? " (Sonne stark)" : maxS > 250 ? " (Sonne moderat)" : maxS > 100 ? " (Sonne schwach)" : " (Trüb/Dunkel)");
                 desc += (sumR <= 0.1) ? "<br> Trocken." : (sumR <= 0.5) ? `<br> Sprühregen (${sumR.toFixed(1)}mm).` : (sumR <= 2.0) ? `<br> Leichter Regen (${sumR.toFixed(1)}mm).` : (sumR <= 5.0) ? `<br> Mäßiger Regen (${sumR.toFixed(1)}mm).` : (sumR <= 10.0) ? `<br> Starker Regen (${sumR.toFixed(1)}mm)!` : `<br> Starkregen (${sumR.toFixed(1)}mm)!!!`;
                 const val = Math.round(maxW);
                 desc += (val <= 5) ? " | Windstill" : (val <= 20) ? ` | Leichter Wind (${val}km/h)` : (val <= 40) ? ` | Mäßiger Wind (${val}km/h)` : (val <= 60) ? ` | Frischer Wind (${val}km/h)` : (val <= 80) ? ` | Starker Wind (${val}km/h)` : ` | Sturm (${val}km/h)`;
                 // ------------------------------------------
 
-                // Block-Statistiken generieren
-                const bT = getStats(d.temp.slice(start, end));
-                const bH = getStats(d.hum.slice(start, end));
-                const bW = getStats(d.wind.slice(start, end));
+                // --- NEUE 2 REIHEN (Höchst-/Tiefstwerte) ---
+                const t = calc(d.temp.slice(start, end));
+                const p = calc(d.prob.slice(start, end));
+                const w = calc(d.wind.slice(start, end));
+                const rSum = d.rain.slice(start, end).reduce((a,b)=>a+b, 0).toFixed(1);
 
-                let statsHtml = `
-                    <div style="display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px;">
-                        ${createStatBlock("Temp", bT, "°C")}
-                        ${createStatBlock("Hum", bH, "%")}
-                        ${createStatBlock("Wind", bW, "km/h")}
-                    </div>`;
+                let stats = `<div style="font-size: 0.85em; margin-top: 5px; color: #aaa;">
+                    <b>Höchstwerte:</b> Temp (${t.max}°C) | Regen (${p.max}% Wkt / ${rSum}mm) | Wind (${w.max} km/h)<br>
+                    <b>Tiefstwerte:</b> Temp (${t.min}°C) | Regen (${p.min}% Wkt) | Wind (${w.min} km/h)
+                </div>`;
+                // ------------------------------------------
 
-                // Alert-Logik
-                let alerts = []; let ongoing = {};
+                // Alerts Logik
+                let alerts = [];
+                let ongoing = {};
                 for(let j = start; j < end; j++) {
-                    const c = d.code[j]; const time = d.time[j].split('T')[1].substring(0,5);
+                    const c = d.code[j];
+                    const time = d.time[j].split('T')[1].substring(0,5);
                     let currentFlags = [];
                     if([95, 96, 99].includes(c)) currentFlags.push("! ACHTUNG: GEWITTER !");
                     if([66, 67, 56, 57].includes(c)) currentFlags.push("! ACHTUNG: GLATTEISGEFAHR !");
@@ -205,6 +196,7 @@
                     if(c >= 71 && c <= 77) currentFlags.push("! ACHTUNG: SCHNEESCHAUER !");
                     if(c === 96 || c === 99) currentFlags.push("! ACHTUNG: HAGEL MÖGLICH !");
                     if(d.gust[j] > 50) currentFlags.push(`! ACHTUNG: STARKE BÖE ! (${d.gust[j]}km/h)`);
+                    
                     currentFlags.forEach(flag => {
                         if(!ongoing[flag]) ongoing[flag] = { start: time, last: time };
                         else ongoing[flag].last = time;
@@ -221,11 +213,12 @@
                     let duration = (ongoing[key].start === ongoing[key].last) ? ongoing[key].start : `${ongoing[key].start}-${ongoing[key].last}`;
                     alerts.push(`${key} (${duration} Uhr)`);
                 });
+                
                 let alertHtml = alerts.length > 0 ? `<div class="warning">${alerts.slice(0,1).join('<br>')}</div>` : "";
                 
-                container.innerHTML += `<div class="phase-panel">${desc}${statsHtml}${alertHtml}</div>`;
+                // Zusammenbau
+                container.innerHTML += `<div class="phase-panel">${desc}${stats}${alertHtml}</div>`;
             }
-
             // Tabelle
             const now = new Date();
             const currentBlock = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')}T${now.getHours().toString().padStart(2,'0')}:${(Math.floor(now.getMinutes()/15)*15).toString().padStart(2,'0')}`;
