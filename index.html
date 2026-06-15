@@ -218,7 +218,23 @@
             }, () => setStatus("GPS Fehler"));
         }
 
-        setInterval(() => { if(lastQuery) fetchData(lastQuery.lat, lastQuery.lon, lastQuery.name, lastQuery.country); }, 600000);
+                // Automatische Aktualisierung alle 10 Sekunden (10000 ms)
+        setInterval(async () => {
+            if (lastQuery) {
+                // 1. Aktuelle Scroll-Position des Tabellen-Containers merken
+                const tableContainer = document.querySelector('.table-container');
+                const scrollPos = tableContainer ? tableContainer.scrollTop : 0;
+        
+                // 2. Daten neu abrufen und rendern
+                await fetchData(lastQuery.lat, lastQuery.lon, lastQuery.name, lastQuery.country);
+        
+                // 3. Scroll-Position sofort wiederherstellen
+                const newTableContainer = document.querySelector('.table-container');
+                if (newTableContainer) {
+                    newTableContainer.scrollTop = scrollPos;
+                }
+            }
+        }, 10000);
     </script>
 </body>
 </html>
