@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>Weather Engineering Terminal v9.7</title>
+    <title>Genauste Deutsche Wetteranzeige</title>
     <style>
         body { background: #050505; color: #00ff41; font-family: 'Courier New', Courier, monospace; padding: 10px; }
         .container { max-width: 1000px; margin: auto; }
@@ -25,7 +25,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>Weather Engineering Console v9.7</h1>
+        <h1>Genauste Deutsche Wetteranzeige</h1>
         <div id="status-bar">Status: Bereit</div>
         <div id="locationDisplay" style="font-weight: bold; margin-bottom: 10px; color: #fff;">Kein Standort</div>
         
@@ -46,7 +46,7 @@
             <li><strong>Rad (W/m²):</strong> Stärke der Sonneneinstrahlung in Watt pro Quadrahtmeter</li>
             <li><strong>UV:</strong> UV-Index = (Normiertes Maß für) Sonnenbrandwirksame solare Bestrahlungsstärke (Ab 3 bitte schützen).</li>
             <li><strong>Cloud%:</strong> Bewölkungsgrad - Wie sehr der Himmel (in Prozent) mit Wolken bedeckt ist.</li>
-            <li><strong>Niederschlagmenge (mm):</strong> Die Menge die der Regen theoretisch einen Eimer oder Pool auffüllen könnte.</li>
+            <li><strong>Niederschlasgmenge (mm):</strong> Die Menge die der Regen theoretisch einen Eimer oder Pool auffüllen könnte.</li>
             <li><strong>P%:</strong> Regenwahrscheinlichkeit.</li>
             <li><strong>Wind/Böe:</strong> Durchschnittliche Windgeschwindigkeit und die maximale Windböe in km/h. (Ab 40 stark, Ab 60 Vorsicht geboten)</li>
         </ul></details>
@@ -67,7 +67,7 @@
             setStatus("wird geladen...");
             if(!lat) {
                 const city = document.getElementById('cityInput').value;
-                if(!city) { setStatus("Fehler: Keine Stadt!"); return; }
+                if(!city) { setStatus("Keine Stadt eingegeben."); return; }
                 const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
                 const data = await res.json();
                 if(!data.results) { setStatus("Stadt nicht gefunden."); return; }
@@ -251,7 +251,7 @@
         const mins = Math.floor(secondsLeft / 60);
         const secs = secondsLeft % 60;
         
-        metaInfo.innerText = `Datenstand: ${lastDataTime} | Nächstes Update in: ${mins}:${secs.toString().padStart(2, '0')} Min.`;
+        metaInfo.innerText = `Datenstand: ${lastDataTime} | Nächste automatische Aktualisierung in: ${mins}:${secs.toString().padStart(2, '0')} Min.`;
 
         if (secondsLeft <= 0) {
             clearInterval(updateTimer);
