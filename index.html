@@ -54,6 +54,8 @@
     </div>
 
     <script>
+        let updateTimer = null;
+        let secondsLeft = 60; // Startzeit in Sekunden (entspricht 1 Minute)
         document.getElementById('dateInput').valueAsDate = new Date();
         let lastQuery = null;
 
@@ -62,7 +64,7 @@
         async function fetchData(lat, lon, name, country) {
             setStatus("wird geladen...");
             if(!lat) {
-                const city = document.getElementById('cityInput').value;
+                const city = startCountdown(60);
                 if(!city) { setStatus("Fehler: Keine Stadt!"); return; }
                 const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
                 const data = await res.json();
@@ -234,7 +236,27 @@
                     newTableContainer.scrollTop = scrollPos;
                 }
             }
-        }, 10000);
+        }, 60000);
+
+        function startCountdown(duration) {
+    if (updateTimer) clearInterval(updateTimer);
+    secondsLeft = duration;
+
+    const metaInfo = document.getElementById('meta-info');
+
+    updateTimer = setInterval(() => {
+        secondsLeft--;
+        const mins = Math.floor(secondsLeft / 60);
+        const secs = secondsLeft % 60;
+        
+        metaInfo.innerText = `Datenstand: ${new Date().toLocaleTimeString()} | Nächstes Update in: ${mins}:${secs.toString().padStart(2, '0')} Min.`;
+
+        if (secondsLeft <= 0) {
+            clearInterval(updateTimer);
+            metaInfo.innerText = "Daten werden aktualisiert...";
+        }
+    }, 1000);
+}
     </script>
 </body>
 </html>
