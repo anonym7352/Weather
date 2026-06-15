@@ -56,6 +56,7 @@
     <script>
         let updateTimer = null;
         let secondsLeft = 60; // Startzeit in Sekunden (entspricht 1 Minute)
+        let lastDataTime = "";
         document.getElementById('dateInput').valueAsDate = new Date();
         let lastQuery = null;
 
@@ -103,6 +104,7 @@
             };
             
             renderAll(d, name);
+            lastDataTime = new Date().toLocaleTimeString(); // Zeit fixieren
             startCountdown(60);
         }
 
@@ -113,6 +115,8 @@
             // 3-Stunden Blöcke (24h / 3h = 8 Blöcke)
             const chunks = 8; 
             const step = Math.floor(d.time.length / chunks);
+            const now = new Date();
+            const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
             for (let i = 0; i < chunks; i++) {
                 let start = i * step;
@@ -249,7 +253,7 @@
         const mins = Math.floor(secondsLeft / 60);
         const secs = secondsLeft % 60;
         
-        metaInfo.innerText = `Datenstand: ${new Date().toLocaleTimeString()} | Nächstes Update in: ${mins}:${secs.toString().padStart(2, '0')} Min.`;
+        metaInfo.innerText = `Datenstand: ${lastDataTime} | Nächstes Update in: ${mins}:${secs.toString().padStart(2, '0')} Min.`;
 
         if (secondsLeft <= 0) {
             clearInterval(updateTimer);
