@@ -154,8 +154,12 @@
 
                 let alerts = [];
                 for(let j=start; j<end; j++) {
-                    if([95,96,99].includes(d.code[j])) alerts.push(`GEWITTER um ${d.time[j].split('T')[1].substring(0,2)} Uhr`);
-                    if(d.gust[j] > 50) alerts.push(`BÖE (${d.gust[j]}km/h) um ${d.time[j].split('T')[1].substring(0,2)} Uhr`);
+                    const c = d.code[j];
+                    if([95, 96, 99].includes(c)) alerts.push(`⚠️ GEWITTER`);
+                    if([66, 67, 56, 57].includes(c)) alerts.push(`⚠️ GLATTEISGEFAHR`);
+                    if(d.snow[j] > 0) alerts.push(`❄️ SCHNEEFALL (${d.snow[j]}cm)`);
+                    if(c >= 71 && c <= 77) alerts.push(`❄️ SCHNEESCHAUER`);
+                    if(c === 96 || c === 99) alerts.push(`⚡ HAGEL MÖGLICH`);
                 }
                 
                 let alertHtml = alerts.length > 0 ? `<div class="warning">${alerts.slice(0,1).join('<br>')}</div>` : "";
