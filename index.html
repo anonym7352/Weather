@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>Weather Engineering Terminal v9.6</title>
+    <title>Weather Engineering Terminal v9.7</title>
     <style>
         body { background: #050505; color: #00ff41; font-family: 'Courier New', Courier, monospace; padding: 10px; }
         .container { max-width: 1000px; margin: auto; }
@@ -25,7 +25,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>Weather Engineering Console v9.6</h1>
+        <h1>Weather Engineering Console v9.7</h1>
         <div id="status-bar">Status: Bereit</div>
         <div id="locationDisplay" style="font-weight: bold; margin-bottom: 10px; color: #fff;">Kein Standort</div>
         
@@ -42,12 +42,12 @@
         <div id="summary-container"></div>
         
         <details open><summary>Parameter Legende</summary><ul>
-            <li><strong>°C:</strong> Lufttemp (Schatten). >25°C = Hitze.</li>
-            <li><strong>Rad (W/m²):</strong> Einstrahlung. <100=Trüb, >500=Sonnig.</li>
+            <li><strong>°C:</strong> Lufttemp (Schatten).</li>
+            <li><strong>Rad (W/m²):</strong> Einstrahlung.</li>
             <li><strong>UV:</strong> 0-2=Niedrig, 6+=Hoch.</li>
-            <li><strong>Hum%:</strong> Rel. Feuchtigkeit. >80%=Schwül.</li>
-            <li><strong>Regen:</strong> mm je Intervall. >0.5=Schauer.</li>
-            <li><strong>Wind/Böe:</strong> km/h. >50=Sturm.</li>
+            <li><strong>Cloud%:</strong> Bewölkungsgrad.</li>
+            <li><strong>Regen:</strong> mm je Intervall.</li>
+            <li><strong>Wind/Böe:</strong> km/h.</li>
         </ul></details>
         
         <div id="results"></div>
@@ -96,7 +96,8 @@
                 wind: wData[intervalParam].wind_speed_10m,
                 gust: wData[intervalParam].wind_gusts_10m,
                 code: wData[intervalParam].weather_code,
-                snow: wData[intervalParam].snowfall
+                snow: wData[intervalParam].snowfall,
+                cloud: wData[intervalParam].cloud_cover
             };
             
             renderAll(d, name);
@@ -107,39 +108,54 @@
             const container = document.getElementById('summary-container');
             container.innerHTML = `<h2>Analyse: ${name}</h2>`;
             
-            // Anpassung auf 3-Stunden Blöcke (8 Phasen)
+            // 3-Stunden Blöcke (24h / 3h = 8 Blöcke)
             const chunks = 8; 
             const step = Math.floor(d.time.length / chunks);
 
             for (let i = 0; i < chunks; i++) {
                 let start = i * step;
                 let end = start + step;
-                if (i === chunks - 1) end = d.time.length; // Rest abdecken
+                if (end > d.time.length) end = d.time.length;
                 let slice = d.time.slice(start, end);
                 if (slice.length === 0) continue;
 
-                // Berechnung der Werte für den Block
-                let temps = d.temp.slice(start, end);
-                let avgT = temps.reduce((a,b)=>a+b, 0) / temps.length;
+                let avgT = d.temp.slice(start, end).reduce((a,b)=>a+b, 0) / slice.length;
                 let maxW = Math.max(...d.wind.slice(start, end));
                 let sumR = d.rain.slice(start, end).reduce((a,b)=>a+b, 0);
-                let avgS = d.rad.slice(start, end).reduce((a,b)=>a+b, 0) / slice.length;
-                let avgCloud = d.cloud_cover.slice(start, end).reduce((a,b)=>a+b, 0) / slice.length;
+                let maxS = Math.max(...d.rad.slice(start, end));
+                let avgCloud = d.cloud.slice(start, end).reduce((a,b)=>a+b, 0) / slice.length;
 
-                // Präzisere Textbausteine
-                let tDesc = avgT < 5 ? "kalt (" + avgT.toFixed(1) + "°C)" : (avgT < 18 ? "kühl (" + avgT.toFixed(1) + "°C)" : "warm (" + avgT.toFixed(1) + "°C)");
-                let sDesc = avgS > 400 ? "stark sonnig" : (avgS > 150 ? "sonnig" : "bewölkt");
-                let cDesc = avgCloud > 80 ? "bedeckt" : (avgCloud > 40 ? "leicht bewölkt" : "klar");
-                let rDesc = sumR > 1 ? "starker Regen" : (sumR > 0 ? "leichter Regen" : "trocken");
-                let wDesc = maxW > 40 ? "stürmisch" : (maxW > 20 ? "windig" : "windstill");
+                // Präzisere Text-Logik
+                let desc = `<b>${d.time[start].split('T')[1].substring(0,5)} - ${d.time[end-1].split('T')[1].substring(0,5)} Uhr:</b><br>`;
+                
+                // Temperatur
+                if (avgT < 5) desc += "🥶 Eiskalt (" + avgT.toFixed(1) + "°C), ";
+                else if (avgT < 15) desc += "🧊 Kühl (" + avgT.toFixed(1) + "°C), ";
+                else if (avgT < 25) desc += "☀️ Mild (" + avgT.toFixed(1) + "°C), ";
+                else desc += "🔥 Heiß (" + avgT.toFixed(1) + "°C), ";
 
-                let desc = `<strong>${d.time[start].split('T')[1].substring(0,5)} - ${d.time[end-1].split('T')[1].substring(0,5)} Uhr:</strong><br>`;
-                desc += `${tDesc}, ${sDesc} (${cDesc}), ${rDesc}, ${wDesc}.`;
+                // Bewölkung & Sonne
+                if (avgCloud > 80) desc += "bedeckt";
+                else if (avgCloud > 50) desc += "bewölkt";
+                else if (avgCloud > 20) desc += "leicht bewölkt";
+                else desc += "klar";
+
+                desc += (maxS > 400 ? " (Sonne stark)" : maxS > 150 ? " (Sonne schwach)" : " (trüb)");
+
+                // Regen
+                if (sumR > 3) desc += "<br>⚠️ Starker Regen (" + sumR.toFixed(1) + "mm)!";
+                else if (sumR > 0.2) desc += "<br>☔ Leichter Regen (" + sumR.toFixed(1) + "mm).";
+                else desc += "<br>✅ Trocken.";
+
+                // Wind
+                if (maxW > 50) desc += " | 💨 Sturm (" + Math.round(maxW) + "km/h)";
+                else if (maxW > 30) desc += " | 💨 Windig (" + Math.round(maxW) + "km/h)";
+                else desc += " | 🍃 Windstill";
 
                 let alerts = [];
                 for(let j=start; j<end; j++) {
                     if([95,96,99].includes(d.code[j])) alerts.push(`GEWITTER um ${d.time[j].split('T')[1].substring(0,2)} Uhr`);
-                    if(d.gust[j] > 50) alerts.push(`BÖEN (${d.gust[j]}km/h)`);
+                    if(d.gust[j] > 50) alerts.push(`BÖE (${d.gust[j]}km/h) um ${d.time[j].split('T')[1].substring(0,2)} Uhr`);
                 }
                 
                 let alertHtml = alerts.length > 0 ? `<div class="warning">${alerts.slice(0,1).join('<br>')}</div>` : "";
@@ -150,13 +166,13 @@
             const now = new Date();
             const currentBlock = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')}T${now.getHours().toString().padStart(2,'0')}:${(Math.floor(now.getMinutes()/15)*15).toString().padStart(2,'0')}`;
             
-            let html = `<div class="table-container"><table><tr><th>Zeit</th><th>°C</th><th>Rad</th><th>UV</th><th>Hum%</th><th>Regen</th><th>P%</th><th>Wind</th><th>Böe</th></tr>`;
+            let html = `<div class="table-container"><table><tr><th>Zeit</th><th>°C</th><th>Rad</th><th>UV</th><th>Cloud%</th><th>Regen</th><th>P%</th><th>Wind</th><th>Böe</th></tr>`;
             for(let i = 0; i < d.time.length; i++) {
                 const isCurrent = d.time[i].startsWith(currentBlock);
                 html += `<tr class="${isCurrent ? 'current-row' : ''}">
                     <td>${isCurrent ? '<span class="arrow">></span>' : ''}${d.time[i].split('T')[1].substring(0,5)}</td>
                     <td>${d.temp[i]}</td><td>${Math.round(d.rad[i]||0)}</td><td>${d.uv[i]||0}</td>
-                    <td>${d.hum[i]}</td><td>${d.rain[i]}</td><td>${d.prob[i]||0}</td>
+                    <td>${d.cloud[i]}%</td><td>${d.rain[i]}</td><td>${d.prob[i]||0}</td>
                     <td>${d.wind[i]}</td><td>${d.gust[i]}</td></tr>`;
             }
             container.innerHTML += html + '</table></div>';
