@@ -152,15 +152,43 @@
                 else if (maxW > 30) desc += " | 💨 Windig (" + Math.round(maxW) + "km/h)";
                 else desc += " | 🍃 Windstill";
 
-                let alerts = [];
-                for(let j=start; j<end; j++) {
+               let alerts = [];
+                let ongoing = {}; // Speichert aktive Ereignisse: { "Titel": { start: "HH:MM" } }
+
+                for(let j = start; j < end; j++) {
                     const c = d.code[j];
-                    if([95, 96, 99].includes(c)) alerts.push(`⚠️ GEWITTER`);
-                    if([66, 67, 56, 57].includes(c)) alerts.push(`⚠️ GLATTEISGEFAHR`);
-                    if(d.snow[j] > 0) alerts.push(`❄️ SCHNEEFALL (${d.snow[j]}cm)`);
-                    if(c >= 71 && c <= 77) alerts.push(`❄️ SCHNEESCHAUER`);
-                    if(c === 96 || c === 99) alerts.push(`⚡ HAGEL MÖGLICH`);
+                    const time = d.time[j].split('T')[1].substring(0,5);
+                    let currentFlags = [];
+
+                    // Bedingungen prüfen
+                    if([95, 96, 99].includes(c)) currentFlags.push("⚠️ GEWITTER");
+                    if([66, 67, 56, 57].includes(c)) currentFlags.push("⚠️ GLATTEISGEFAHR");
+                    if(d.snow[j] > 0) currentFlags.push(`❄️ SCHNEEFALL (${d.snow[j]}cm)`);
+                    if(c >= 71 && c <= 77) currentFlags.push("❄️ SCHNEESCHAUER");
+                    if(c === 96 || c === 99) currentFlags.push("⚡ HAGEL MÖGLICH");
+                    if(d.gust[j] > 50) currentFlags.push(`💨 BÖE (${d.gust[j]}km/h)`);
+
+                    // Neue oder andauernde Ereignisse tracken
+                    currentFlags.forEach(flag => {
+                        if(!ongoing[flag]) ongoing[flag] = { start: time, last: time };
+                        else ongoing[flag].last = time;
+                    });
+
+                    // Ereignisse, die gerade enden, abschließen
+                    Object.keys(ongoing).forEach(key => {
+                        if(!currentFlags.includes(key)) {
+                            let duration = (ongoing[key].start === ongoing[key].last) ? ongoing[key].start : `${ongoing[key].start}-${ongoing[key].last}`;
+                            alerts.push(`${key} (${duration} Uhr)`);
+                            delete ongoing[key];
+                        }
+                    });
                 }
+
+                // Alle Ereignisse, die am Ende des Blocks noch aktiv sind, abschließen
+                Object.keys(ongoing).forEach(key => {
+                    let duration = (ongoing[key].start === ongoing[key].last) ? ongoing[key].start : `${ongoing[key].start}-${ongoing[key].last}`;
+                    alerts.push(`${key} (${duration} Uhr)`);
+                });
                 
                 let alertHtml = alerts.length > 0 ? `<div class="warning">${alerts.slice(0,1).join('<br>')}</div>` : "";
                 container.innerHTML += `<div class="phase-panel">${desc}${alertHtml}</div>`;
