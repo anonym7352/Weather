@@ -57,7 +57,7 @@
 
     <script>
         let updateTimer = null;
-        let secondsLeft = 60; // Startzeit in Sekunden (entspricht 1 Minute)
+        let secondsLeft = 1800; // Startzeit in Sekunden (entspricht 1 Minute)
         let lastDataTime = "";
         document.getElementById('dateInput').valueAsDate = new Date();
         let lastQuery = null;
@@ -306,7 +306,7 @@
                     newTableContainer.scrollTop = scrollPos;
                 }
             }
-        }, 60000);
+        }, 1800000);
 
         function startCountdown(duration) {
             if (updateTimer) clearInterval(updateTimer);
