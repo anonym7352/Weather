@@ -43,11 +43,11 @@
         
         <details open><summary>Parameter Legende</summary><ul>
             <li><strong>°C:</strong> Lufttemperatur im Schatten.</li>
-            <li><strong>Hum%:</strong> Relative Luftfeuchtigkeit (in Prozent) - Der Anteil an Wasserdampf in der Luft im Verhätnis zur maximalen Menge der jeweiligen Temperatur.</li>
-            <li><strong>Rad (W/m²):</strong> Stärke der Sonneneinstrahlung in Watt pro Quadrahtmeter</li>
+            <li><strong>Hum%:</strong> Relative Luftfeuchtigkeit (in Prozent) - Der Anteil an Wasserdampf in der Luft im Verhältnis zur maximalen Menge der jeweiligen Temperatur.</li>
+            <li><strong>Rad (W/m²):</strong> Stärke der Sonneneinstrahlung in Watt pro Quadratmeter</li>
             <li><strong>UV:</strong> UV-Index = (Normiertes Maß für) Sonnenbrandwirksame solare Bestrahlungsstärke (Bei klarem Himmel mit Sonne bitte ab 3 schützen).</li>
             <li><strong>Cloud%:</strong> Bewölkungsgrad - Wie sehr der Himmel (in Prozent) mit Wolken bedeckt ist.</li>
-            <li><strong>Niederschlasgmenge (mm):</strong> Die Menge die der Regen theoretisch einen Eimer oder Pool auffüllen könnte.</li>
+            <li><strong>Niederschlagsmenge (mm):</strong> Die Menge die der Regen theoretisch einen Eimer oder Pool auffüllen könnte.</li>
             <li><strong>P%:</strong> Regenwahrscheinlichkeit.</li>
             <li><strong>Wind/Böe:</strong> Durchschnittliche Windgeschwindigkeit und die maximale Windböe in km/h. (Ab 40 stark, Ab 60 Vorsicht geboten)</li>
         </ul></details>
@@ -110,7 +110,7 @@
             startCountdown(60);
         }
         
-       function renderAll(d, name) {
+        function renderAll(d, name) {
             const container = document.getElementById('summary-container');
             container.innerHTML = `<h2>Analyse: ${name}</h2>`;
 
@@ -153,7 +153,7 @@
                 let avgRad = d.rad.slice(start, end).reduce((a,b)=>a+b, 0) / slice.length;
                 const phaseFeels = calculateFeelsLike(avgT, avgHum, maxW, avgRad, avgCloud);
 
-                // --- ORIGINAL TEXT-LOGIK (Unverändert) ---
+                // --- ORIGINAL TEXT-LOGIK ---
                 let desc = `<b>${d.time[start].split('T')[1].substring(0,5)} - ${d.time[end-1].split('T')[1].substring(0,5)} Uhr:</b><br>`;
                 if (avgT < 0) desc += "Eiskalt (" + avgT.toFixed(1) + "°C), ";
                 else if (avgT < 10) desc += "Kalt (" + avgT.toFixed(1) + "°C), ";
@@ -172,17 +172,34 @@
                 desc += (sumR <= 0.1) ? "<br> Trocken." : (sumR <= 0.5) ? `<br> Sprühregen (${sumR.toFixed(1)}mm).` : (sumR <= 2.0) ? `<br> Leichter Regen (${sumR.toFixed(1)}mm).` : (sumR <= 5.0) ? `<br> Mäßiger Regen (${sumR.toFixed(1)}mm).` : (sumR <= 10.0) ? `<br> Starker Regen (${sumR.toFixed(1)}mm)!` : `<br> Starkregen (${sumR.toFixed(1)}mm)!!!`;
                 const val = Math.round(maxW);
                 desc += (val <= 5) ? " | Windstill" : (val <= 20) ? ` | Leichter Wind (${val}km/h)` : (val <= 40) ? ` | Mäßiger Wind (${val}km/h)` : (val <= 60) ? ` | Frischer Wind (${val}km/h)` : (val <= 80) ? ` | Starker Wind (${val}km/h)` : ` | Sturm (${val}km/h)`;
+                
+                // NEU: Durchschnittliche Gefühlt-Werte im grünen Text platziert
+                desc += `<br>Gefühlt (Ø): Schatten (${phaseFeels.shade}°C) | Sonne (${phaseFeels.sun}°C)`;
                 // ------------------------------------------
 
-                // --- NEUE 2 REIHEN (Höchst-/Tiefstwerte) ---
-                const t = calc(d.temp.slice(start, end));
+                // --- NEUE 2 REIHEN (Höchst-/Tiefstwerte inkl. Gefühlt-Werten) ---
+                const tSlice = d.temp.slice(start, end);
+                const hSlice = d.hum.slice(start, end);
+                const wSlice = d.wind.slice(start, end);
+                const rSlice = d.rad.slice(start, end);
+                const cSlice = d.cloud.slice(start, end);
+
+                const t = calc(tSlice);
                 const p = calc(d.prob.slice(start, end));
-                const w = calc(d.wind.slice(start, end));
+                const w = calc(wSlice);
                 const rSum = d.rain.slice(start, end).reduce((a,b)=>a+b, 0).toFixed(1);
 
+                // Indizes ermitteln, wann der Höchst- und Tiefstwert auftritt
+                const maxIdx = tSlice.indexOf(Math.max(...tSlice));
+                const minIdx = tSlice.indexOf(Math.min(...tSlice));
+
+                // Gefühlte Werte passend zu den Extremwerten berechnen
+                const feelsMax = calculateFeelsLike(tSlice[maxIdx], hSlice[maxIdx], wSlice[maxIdx], rSlice[maxIdx], cSlice[maxIdx]);
+                const feelsMin = calculateFeelsLike(tSlice[minIdx], hSlice[minIdx], wSlice[minIdx], rSlice[minIdx], cSlice[minIdx]);
+
                 let stats = `<div style="font-size: 0.85em; margin-top: 5px; color: #aaa;">
-                    <b>Höchstwerte:</b> Temp (${t.max}°C) | Regen (${p.max}% Wkt / ${rSum}mm) | Wind (${w.max} km/h)<br><b>Gefühlt:</b> Schatten (${phaseFeels.shade}°C) | Sonne (${phaseFeels.sun}°C)<br>
-                    <b>Tiefstwerte:</b> Temp (${t.min}°C) | Regen (${p.min}% Wkt) | Wind (${w.min} km/h)
+                    <b>Höchstwerte:</b> Temp (${t.max}°C) | Gefühlt: Schatten (${feelsMax.shade}°C) Sonne (${feelsMax.sun}°C) | Regen (${p.max}% Wkt / ${rSum}mm) | Wind (${w.max} km/h)<br>
+                    <b>Tiefstwerte:</b> Temp (${t.min}°C) | Gefühlt: Schatten (${feelsMin.shade}°C) Sonne (${feelsMin.sun}°C) | Regen (${p.min}% Wkt) | Wind (${w.min} km/h)
                 </div>`;
                 // ------------------------------------------
 
@@ -229,8 +246,8 @@
             let html = `<div class="table-container"><table><tr><th>Zeit</th><th>°C</th><th>Hum%</th><th>Rad</th><th>UV</th><th>Cloud%</th><th>Regen</th><th>P%</th><th>Wind</th><th>Böe</th><th>Gefühlt Schatten</th><th>Gefühlt Sonne</th></tr>`;
             for(let i = 0; i < d.time.length; i++) {
                 const isCurrent = d.time[i].startsWith(currentBlock);
-              const feels = calculateFeelsLike(d.temp[i], d.hum[i], d.wind[i], d.rad[i], d.cloud[i]);
-              html += `<tr class="${isCurrent ? 'current-row' : ''}">
+                const feels = calculateFeelsLike(d.temp[i], d.hum[i], d.wind[i], d.rad[i], d.cloud[i]);
+                html += `<tr class="${isCurrent ? 'current-row' : ''}">
                 <td>${isCurrent ? '<span class="arrow">></span>' : ''}${d.time[i].split('T')[1].substring(0,5)}</td>
                 <td>${d.temp[i]}</td>
                 <td>${d.hum[i]}%</td>
@@ -247,7 +264,6 @@
             container.innerHTML += html + '</table></div>';
         }
 
-        
         function calculateFeelsLike(temp, humidity, wind, radiation, cloud) {
             let shade = temp;
 
@@ -269,7 +285,6 @@
             };
         }
 
-
         function getLocation() {
             setStatus("GPS wird gesucht...");
             navigator.geolocation.getCurrentPosition(pos => {
@@ -278,17 +293,14 @@
             }, () => setStatus("GPS Fehler"));
         }
 
-                // Automatische Aktualisierung alle 10 Sekunden (10000 ms)
+        // Automatische Aktualisierung alle 60 Sekunden
         setInterval(async () => {
             if (lastQuery) {
-                // 1. Aktuelle Scroll-Position des Tabellen-Containers merken
                 const tableContainer = document.querySelector('.table-container');
                 const scrollPos = tableContainer ? tableContainer.scrollTop : 0;
         
-                // 2. Daten neu abrufen und rendern
                 await fetchData(lastQuery.lat, lastQuery.lon, lastQuery.name, lastQuery.country);
         
-                // 3. Scroll-Position sofort wiederherstellen
                 const newTableContainer = document.querySelector('.table-container');
                 if (newTableContainer) {
                     newTableContainer.scrollTop = scrollPos;
@@ -297,24 +309,24 @@
         }, 60000);
 
         function startCountdown(duration) {
-    if (updateTimer) clearInterval(updateTimer);
-    secondsLeft = duration;
+            if (updateTimer) clearInterval(updateTimer);
+            secondsLeft = duration;
 
-    const metaInfo = document.getElementById('meta-info');
+            const metaInfo = document.getElementById('meta-info');
 
-    updateTimer = setInterval(() => {
-        secondsLeft--;
-        const mins = Math.floor(secondsLeft / 60);
-        const secs = secondsLeft % 60;
-        
-        metaInfo.innerText = `Datenstand: ${lastDataTime} | Nächste automatische Aktualisierung in: ${mins}:${secs.toString().padStart(2, '0')} Min.`;
+            updateTimer = setInterval(() => {
+                secondsLeft--;
+                const mins = Math.floor(secondsLeft / 60);
+                const secs = secondsLeft % 60;
+                
+                metaInfo.innerText = `Datenstand: ${lastDataTime} | Nächste automatische Aktualisierung in: ${mins}:${secs.toString().padStart(2, '0')} Min.`;
 
-        if (secondsLeft <= 0) {
-            clearInterval(updateTimer);
-            metaInfo.innerText = "Daten werden aktualisiert...";
+                if (secondsLeft <= 0) {
+                    clearInterval(updateTimer);
+                    metaInfo.innerText = "Daten werden aktualisiert...";
+                }
+            }, 1000);
         }
-    }, 1000);
-}
     </script>
 </body>
 </html>
