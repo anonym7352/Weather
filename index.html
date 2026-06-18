@@ -149,6 +149,9 @@
                 let sumR = d.rain.slice(start, end).reduce((a,b)=>a+b, 0);
                 let maxS = Math.max(...d.rad.slice(start, end));
                 let avgCloud = d.cloud.slice(start, end).reduce((a,b)=>a+b, 0) / slice.length;
+                let avgHum = d.hum.slice(start, end).reduce((a,b)=>a+b, 0) / slice.length;
+                let avgRad = d.rad.slice(start, end).reduce((a,b)=>a+b, 0) / slice.length;
+                const phaseFeels = calculateFeelsLike(avgT, avgHum, maxW, avgRad, avgCloud);
 
                 // --- ORIGINAL TEXT-LOGIK (Unverändert) ---
                 let desc = `<b>${d.time[start].split('T')[1].substring(0,5)} - ${d.time[end-1].split('T')[1].substring(0,5)} Uhr:</b><br>`;
@@ -178,7 +181,7 @@
                 const rSum = d.rain.slice(start, end).reduce((a,b)=>a+b, 0).toFixed(1);
 
                 let stats = `<div style="font-size: 0.85em; margin-top: 5px; color: #aaa;">
-                    <b>Höchstwerte:</b> Temp (${t.max}°C) | Regen (${p.max}% Wkt / ${rSum}mm) | Wind (${w.max} km/h)<br>
+                    <b>Höchstwerte:</b> Temp (${t.max}°C) | Regen (${p.max}% Wkt / ${rSum}mm) | Wind (${w.max} km/h)<br><b>Gefühlt:</b> Schatten (${phaseFeels.shade}°C) | Sonne (${phaseFeels.sun}°C)<br>
                     <b>Tiefstwerte:</b> Temp (${t.min}°C) | Regen (${p.min}% Wkt) | Wind (${w.min} km/h)
                 </div>`;
                 // ------------------------------------------
@@ -223,9 +226,10 @@
             const now = new Date();
             const currentBlock = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')}T${now.getHours().toString().padStart(2,'0')}:${(Math.floor(now.getMinutes()/15)*15).toString().padStart(2,'0')}`;
             
-            let html = `<div class="table-container"><table><tr><th>Zeit</th><th>°C</th><th>Hum%</th><th>Rad</th><th>UV</th><th>Cloud%</th><th>Regen</th><th>P%</th><th>Wind</th><th>Böe</th></tr>`;
+            let html = `<div class="table-container"><table><tr><th>Zeit</th><th>°C</th><th>Hum%</th><th>Rad</th><th>UV</th><th>Cloud%</th><th>Regen</th><th>P%</th><th>Wind</th><th>Böe</th><th>Gefühlt Schatten</th><th>Gefühlt Sonne</th></tr>`;
             for(let i = 0; i < d.time.length; i++) {
                 const isCurrent = d.time[i].startsWith(currentBlock);
+              const feels = calculateFeelsLike(d.temp[i], d.hum[i], d.wind[i], d.rad[i], d.cloud[i]);
               html += `<tr class="${isCurrent ? 'current-row' : ''}">
                 <td>${isCurrent ? '<span class="arrow">></span>' : ''}${d.time[i].split('T')[1].substring(0,5)}</td>
                 <td>${d.temp[i]}</td>
@@ -236,10 +240,35 @@
                 <td>${d.rain[i]}</td>
                 <td>${d.prob[i]||0}</td>
                 <td>${d.wind[i]}</td>
-                <td>${d.gust[i]}</td></tr>`;
+                <td>${d.gust[i]}</td>
+                <td>${feels.shade}°C</td>
+                <td>${feels.sun}°C</td></tr>`;
             }
             container.innerHTML += html + '</table></div>';
         }
+
+        
+        function calculateFeelsLike(temp, humidity, wind, radiation, cloud) {
+            let shade = temp;
+
+            if (temp >= 20) {
+                shade += ((humidity - 40) / 100) * (temp / 3);
+            }
+
+            if (wind > 5) {
+                shade -= Math.min((wind / 12), 8);
+            }
+
+            let sun = shade;
+            const effectiveRadiation = Math.max(0, radiation || 0) * (1 - ((cloud || 0) / 100) * 0.35);
+            sun += effectiveRadiation / 110;
+
+            return {
+                shade: shade.toFixed(1),
+                sun: sun.toFixed(1)
+            };
+        }
+
 
         function getLocation() {
             setStatus("GPS wird gesucht...");
